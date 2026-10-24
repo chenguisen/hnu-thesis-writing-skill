@@ -39,7 +39,8 @@ description: >
    `references/formatting.md` 设置样式。不要从空白文档手工搭版式，模板已包含学校要求的封面与页眉。
 3. **写内容**：先内容后格式。每章另起一页；章标题 ≤15 字、无标点；结论单独一章、不加章号。
 4. **排版**：按 `references/formatting.md` 设置样式。优先改“样式”，不要逐段手工加粗/改字号。
-5. **自检**：`python scripts/thesis_lint.py thesis.docx --degree master`，逐条处理 ERROR/WARN。
+5. **自检**：先安装依赖（`python -m pip install python-docx`），再运行
+   `python scripts/thesis_lint.py thesis.docx --degree master`，逐条处理 ERROR/WARN。
 6. **人工复核**：按 `references/checklist.md` 检查签名、印刷、装订、电子版等机器查不了的项目。
 7. **提交**：纸质版 + 与印刷版格式一致的电子版；保留一份 PDF 用于比对分页。
 
@@ -62,7 +63,7 @@ description: >
 | 节标题（1.1）         | 小 3 号黑体（15 pt），顶格，上下各空 12 磅                                |
 | 条标题（1.1.1）       | 4 号黑体（14 pt），上下各空 6 磅                                      |
 | 款/项（1.1.1.1、(1)） | 小 4 号黑体（12 pt）                                             |
-| 页眉               | 小 5 号宋体（9 pt）；奇数页“学位论文类别”，偶数页“论文题目”；1.5 磅粗细双线              |
+| 页眉               | 小 5 号宋体（9 pt）；奇数页“学位论文类别”，偶数页“论文题目”；粗线 1.5 磅、细线在下 |
 | 页码               | 前置部分罗马数字（从原创性声明页起），正文阿拉伯数字；页脚居中                            |
 | 中文摘要             | “摘 要”小 2 号黑体居中；正文小 4 号宋体；“关键词：”小 4 号黑体                     |
 | 英文摘要             | “Abstract”小 2 号 Times New Roman 加粗；正文小 4 号 Times New Roman |

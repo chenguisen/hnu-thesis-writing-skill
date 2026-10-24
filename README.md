@@ -1,11 +1,13 @@
 # 湖南大学学位论文写作 Skill
 
+![tests](https://github.com/chenguisen/hnu-thesis-writing-skill/actions/workflows/tests.yml/badge.svg)
+
 从《湖南大学研究生学位论文撰写规范》提取的一套可执行写作与排版规范，包含：
 
 - 一个 AI skill（`SKILL.md`）：把规范变成写作流程、硬指标和常见错误清单；
-- 四份 reference：论文结构、版式、参考文献、提交前检查清单；
-- 一个零依赖（除 `python-docx`）的自检脚本：检查 `.docx` 的页面、字体字号、标题、摘要、参考文献、图表等；
-- 一套回归测试与一个合规样例文档。
+- 四份规范 reference（论文结构、版式、参考文献、提交前检查清单）和一份来源说明；
+- 一个仅依赖 `python-docx` 的自检脚本：检查 `.docx` 的页面、字体字号、标题、摘要、参考文献、图表等；
+- 一套回归测试与一个无 ERROR 的样例文档。
 
 > **版本说明**：本仓库依据的规范文档元数据创建于 **2005-08-31**，其中引用的国家标准为
 > GB7713-87、GB7714-87、GB3100～3102-86。若湖南大学研究生院/学院已发布新版模板或规范，
@@ -47,7 +49,7 @@ git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git \
 ### 2. 直接运行格式自检
 
 ```bash
-python -m pip install python-docx
+python -m pip install -r requirements.txt
 python scripts/thesis_lint.py thesis.docx --degree master
 ```
 
@@ -120,6 +122,7 @@ python scripts/thesis_lint.py thesis.docx --degree master
 ## 开发与测试
 
 ```bash
+python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 # 或
 python tests/test_lint.py
