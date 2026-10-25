@@ -89,8 +89,8 @@ RE_L4 = re.compile(
 )
 RE_ITEM = re.compile(r"^[（(]\s*\d+\s*[）)]")
 RE_REF_ENTRY = re.compile(r"^\s*[\[［]\s*(\d+)\s*[\]］]")
-RE_FIG_CAP = re.compile(r"^\s*图\s*(\d+)\s*[.．]\s*(\d+)")
-RE_TAB_CAP = re.compile(r"^\s*表\s*(\d+)\s*[.．]\s*(\d+)")
+RE_FIG_CAP = re.compile(r"^\s*图\s*(\d+)\s*[.．]\s*(\d+)(?:\s+|$)")
+RE_TAB_CAP = re.compile(r"^\s*表\s*(\d+)\s*[.．]\s*(\d+)(?:\s+|$)")
 RE_FIG_LOOSE = re.compile(r"^\s*图\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_LOOSE = re.compile(r"^\s*表\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_PLACEHOLDER = re.compile(r"^\s*表\s*[xX×]\s*(?:[.．]\s*|\s+)(\S.*)$")
@@ -592,14 +592,17 @@ class Linter:
                 m = RE_CHAPTER.match(t)
                 if m:
                     num = int(m.group(1))
-                    chapter_numbers.append(num)
+                    if not chapter_numbers:
+                        chapter_numbers.append(num)
+                    else:
+                        expected = chapter_numbers[0] + len(chapter_numbers)
+                        if num != expected:
+                            self.report.warn(
+                                "HEAD-04",
+                                f"章编号不连续：期望第 {expected} 章，实际“{t[:20]}”",
+                            )
+                        chapter_numbers.append(num)
                     current_chapter = num
-                    expected = len(chapter_numbers)
-                    if num != expected:
-                        self.report.warn(
-                            "HEAD-04",
-                            f"章编号不连续：期望第 {expected} 章，实际“{t[:20]}”",
-                        )
                 self._check_heading_style(p, t, "章", 18, "center", font, size, bold)
                 before = effective_space(p, "space_before")
                 after = effective_space(p, "space_after")
