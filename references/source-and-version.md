@@ -46,9 +46,10 @@
 2. `references/structure.md` 的字数、篇数、摘要长度。
 3. `references/formatting.md` 的页面、字体、页眉、页码。
 4. `references/citations.md` 的著录格式与标准号。
-5. `scripts/thesis_lint.py` 中的 `DEGREES` 常量与检查阈值。
-6. `tests/fixture_master.docx` 与 `tests/test_lint.py` 的回归断言。
-7. 本文件的“版本与效力”日期。
+5. `references/cross-references.md` 的题注/书签/REF 域操作。
+6. `scripts/thesis_lint.py` 中的 `DEGREES` 常量与检查阈值。
+7. `tests/fixture_master.docx` 与 `tests/test_lint.py` 的回归断言。
+8. 本文件的“版本与效力”日期。
 
 ## 6. 免责声明
 

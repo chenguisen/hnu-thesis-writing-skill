@@ -18,12 +18,20 @@ import unittest
 from pathlib import Path
 
 import docx
+from docx.oxml import OxmlElement
 
 ROOT = Path(__file__).resolve().parent.parent
 LINT = ROOT / "scripts" / "thesis_lint.py"
 FIXTURE = Path(__file__).resolve().parent / "fixture_master.docx"
 sys.path.insert(0, str(ROOT / "scripts"))
 import thesis_lint as tl  # noqa: E402
+
+
+def run_lint(path: Path, *extra: str) -> subprocess.CompletedProcess:
+    cmd = [sys.executable, "-X", "utf8", str(LINT), str(path), "--degree", "master", *extra]
+    return subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
 
 
 class UnitTest(unittest.TestCase):
@@ -74,13 +82,29 @@ class UnitTest(unittest.TestCase):
         self.assertEqual(tl.effective_first_line_indent(p), docx.shared.Pt(24))
         self.assertEqual(tl.effective_line_spacing(p), docx.shared.Pt(20))
 
+    def test_count_ref_fields(self):
+        document = docx.Document()
+        p = document.add_paragraph()
+        run = p.add_run()
+        instr = OxmlElement("w:instrText")
+        instr.text = r" REF _Ref12345 \h "
+        run._r.append(instr)
+        self.assertEqual(tl.count_ref_fields(document), 1)
+
+    def test_orphan_figure_is_reported(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "orphan.docx"
+            document = docx.Document(str(FIXTURE))
+            document.add_paragraph("图1.1  未被正文引用的示意图")
+            document.save(str(path))
+            result = run_lint(path)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("XREF-02", result.stdout)
+
 
 class LintTest(unittest.TestCase):
     def run_lint(self, path: Path, *extra: str) -> subprocess.CompletedProcess:
-        cmd = [sys.executable, "-X", "utf8", str(LINT), str(path), "--degree", "master", *extra]
-        return subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
-        )
+        return run_lint(path, *extra)
 
     def test_compliant_fixture_has_no_error(self):
         result = self.run_lint(FIXTURE)

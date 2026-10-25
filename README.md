@@ -5,8 +5,8 @@
 从《湖南大学研究生学位论文撰写规范》提取的一套可执行写作与排版规范，包含：
 
 - 一个 AI skill（`SKILL.md`）：把规范变成写作流程、硬指标和常见错误清单；
-- 四份规范 reference（论文结构、版式、参考文献、提交前检查清单）和一份来源说明；
-- 一个仅依赖 `python-docx` 的自检脚本：检查 `.docx` 的页面、字体字号、标题、摘要、参考文献、图表等；
+- 五份规范 reference（论文结构、版式、参考文献、交叉引用、提交前检查清单）和一份来源说明；
+- 一个仅依赖 `python-docx` 的自检脚本：检查 `.docx` 的页面、字体字号、标题、摘要、参考文献、图表、交叉引用等；
 - 一套回归测试与一个无 ERROR 的样例文档。
 
 > **版本说明**：本仓库依据的规范文档元数据创建于 **2005-08-31**，其中引用的国家标准为
@@ -23,6 +23,7 @@
 | [`references/formatting.md`](references/formatting.md) | 页面、字体字号、页眉页脚、标题层次、图表公式、印刷装订 |
 | [`references/citations.md`](references/citations.md) | 正文引用位置、文后著录格式、GB7714 新旧版差异 |
 | [`references/checklist.md`](references/checklist.md) | 提交前逐项检查清单（含机器查不了的项目） |
+| [`references/cross-references.md`](references/cross-references.md) | 图/表/公式的题注、书签、REF 域与点击跳转 |
 | [`references/source-and-version.md`](references/source-and-version.md) | 来源、提取方法、原文错误与版本说明 |
 | [`scripts/thesis_lint.py`](scripts/thesis_lint.py) | 对 `.docx` 做结构与格式自检 |
 | [`tests/test_lint.py`](tests/test_lint.py) | 自检脚本的回归测试 |
@@ -78,18 +79,20 @@ python scripts/thesis_lint.py thesis.docx --degree master
 ========================================================================
 文件：thesis.docx
 学位类型：学术硕士
-结果：ERROR 0 项，WARN 4 项，INFO 0 项
+结果：ERROR 0 项，WARN 5 项，INFO 0 项
 
 关键指标：
   - 正文汉字数：419
   - 中文摘要汉字数：70
   - 关键词个数：4
   - 参考文献条数：5
+  - REF 交叉引用域：0
   - 正文主字号(pt)：12.0
   - 正文主字体：宋体
 
 [警告（建议核对）]
  1. [BODY-01] 正文汉字约 419 字，低于学术硕士要求（30000～50000 字）
+ 2. [XREF-01] 检测到 1 个图/表题注，但未检测到 REF 交叉引用域；正文编号可能是手打，插入/删除后不会自动更新，也不能点击跳转
  ...
 ```
 
@@ -99,8 +102,8 @@ python scripts/thesis_lint.py thesis.docx --degree master
 ### 3. 先查哪些项
 
 脚本覆盖：A4 与页边距、页眉/页码域、标题层次与字号、正文字体字号与行距、摘要与关键词个数、
-参考文献数量与外文比例、图表题注编号、表格左右边线、原创性声明与目录是否存在。
-**不覆盖**：内容质量、逻辑、查重、签名、印刷装订、Word 域是否已更新——这些用
+参考文献数量与外文比例、图表题注编号、表格左右边线、REF 交叉引用域与孤图/孤表、原创性声明与目录是否存在。
+**不覆盖**：内容质量、逻辑、查重、签名、印刷装订、域是否已按 F9 更新且显示正确——这些用
 [`references/checklist.md`](references/checklist.md) 人工核对。
 
 ## 规范要点（速查）
@@ -119,6 +122,18 @@ python scripts/thesis_lint.py thesis.docx --degree master
 | 图表 | 图题在下、表题在上；按章编号；表格不加左右边线 |
 | 公式 | 居中；按章编号（1.1）；编号右顶格 |
 | 结论 | 单独一章，不加章号，约 2000 字 |
+
+### 图/表/公式能点击跳转吗？
+
+能，但跳转靠的是 Word/WPS 的**交叉引用域**，不是手打编号：
+
+1. 图/表：插入题注 → 正文用“交叉引用”，勾选“插入为超链接”；
+2. 公式：给编号加书签，正文用“交叉引用 → 书签”（或 `SEQ` 域自动编号）；
+3. Ctrl+A → F9 更新域，导出 PDF 前再更新一次。
+
+完整步骤、PDF 链接保留和常见断链问题见
+[`references/cross-references.md`](references/cross-references.md)。`thesis_lint.py` 会检查
+`REF` 域是否存在，以及是否有“孤图/孤表”（题注未在正文引用）。
 
 ### 两个需要特别注意的矛盾
 

@@ -376,6 +376,16 @@ def get_page_field_count(section) -> int:
     return xml.count("PAGE")
 
 
+def count_ref_fields(doc) -> int:
+    """统计 Word 交叉引用域（REF _Ref...）。PAGEREF 不计入。"""
+    n = 0
+    for el in doc.element.body.iter(qn("w:instrText")):
+        text = el.text or ""
+        if re.search(r"\bREF\b", text):
+            n += 1
+    return n
+
+
 def _border_is_visible(el) -> bool:
     return el is not None and el.get(qn("w:val")) not in (None, "nil", "none")
 
@@ -951,6 +961,51 @@ class Linter:
                         )
                         break
 
+    # -- 交叉引用 ---------------------------------------------------------
+    def check_cross_references(self) -> None:
+        ref_fields = count_ref_fields(self.doc)
+        self.report.metrics["ref_fields"] = ref_fields
+
+        captions: list[tuple[str, int, int, int]] = []
+        for i, (p, t) in enumerate(zip(self.paras, self.texts)):
+            if is_toc_line(t, p.style.name):
+                continue
+            m = RE_FIG_CAP.match(t)
+            if m:
+                captions.append(("图", int(m.group(1)), int(m.group(2)), i))
+                continue
+            m = RE_TAB_CAP.match(t)
+            if m:
+                captions.append(("表", int(m.group(1)), int(m.group(2)), i))
+
+        has_math = bool(self.doc.element.body.findall(".//" + qn("m:oMath")))
+        if (captions or has_math) and ref_fields == 0:
+            what = f"{len(captions)} 个图/表题注" + ("和公式" if has_math else "")
+            self.report.warn(
+                "XREF-01",
+                f"检测到 {what}，但未检测到 REF 交叉引用域；正文编号可能是手打，插入/删除后不会自动更新，也不能点击跳转",
+                "用“插入题注 + 交叉引用（勾选插入为超链接）”；公式用书签 + 交叉引用，详见 references/cross-references.md",
+            )
+
+        orphans: list[str] = []
+        for kind, ch, num, idx in captions:
+            pattern = re.compile(rf"{kind}\s*{ch}\s*[.．]\s*{num}(?!\d)")
+            found = False
+            for j, t in enumerate(self.texts):
+                if j == idx or is_toc_line(t, self.paras[j].style.name):
+                    continue
+                if pattern.search(t):
+                    found = True
+                    break
+            if not found:
+                orphans.append(f"{kind}{ch}.{num}")
+        if orphans:
+            self.report.warn(
+                "XREF-02",
+                "以下图/表未在正文中找到引用：" + "、".join(orphans),
+                "每张图/每个表都应在正文中至少引用一次；编号建议用交叉引用域",
+            )
+
     # -- 前置部分 ---------------------------------------------------------
     def check_front_matter(self) -> None:
         all_text = "\n".join(self.texts)
@@ -973,6 +1028,7 @@ class Linter:
         self.check_body()
         self.check_references()
         self.check_figures_tables()
+        self.check_cross_references()
         return self.report
 
 
