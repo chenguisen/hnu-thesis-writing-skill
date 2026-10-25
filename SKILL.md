@@ -43,6 +43,7 @@ description: >
    `references/cross-references.md`）。
 5. **自检**：先安装依赖（`python -m pip install python-docx`），再运行
    `python scripts/thesis_lint.py thesis.docx --degree master`，逐条处理 ERROR/WARN。
+   只写了一章时加 `--chapter`，跳过封面/声明/摘要/目录/参考文献与总字数检查。
 6. **人工复核**：按 `references/checklist.md` 检查签名、印刷、装订、电子版等机器查不了的项目。
 7. **提交**：纸质版 + 与印刷版格式一致的电子版；保留一份 PDF 用于比对分页。
 

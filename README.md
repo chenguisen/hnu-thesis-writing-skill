@@ -61,6 +61,8 @@ git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git `
 ```bash
 python -m pip install -r requirements.txt
 python scripts/thesis_lint.py thesis.docx --degree master
+# 只写了一章时：跳过封面/声明/摘要/目录/参考文献/总字数
+python scripts/thesis_lint.py chapter3.docx --degree master --chapter
 ```
 
 `--degree` 可选：

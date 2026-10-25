@@ -91,6 +91,9 @@ RE_ITEM = re.compile(r"^[（(]\s*\d+\s*[）)]")
 RE_REF_ENTRY = re.compile(r"^\s*[\[［]\s*(\d+)\s*[\]］]")
 RE_FIG_CAP = re.compile(r"^\s*图\s*(\d+)\s*[.．]\s*(\d+)")
 RE_TAB_CAP = re.compile(r"^\s*表\s*(\d+)\s*[.．]\s*(\d+)")
+RE_FIG_LOOSE = re.compile(r"^\s*图\s*(\d+)\s*[.．]?\s+(\S.*)$")
+RE_TAB_LOOSE = re.compile(r"^\s*表\s*(\d+)\s*[.．]?\s+(\S.*)$")
+RE_TAB_PLACEHOLDER = re.compile(r"^\s*表\s*[xX×]\s*(?:[.．]\s*|\s+)(\S.*)$")
 RE_CITATION = re.compile(r"[\[［]\s*\d+(?:\s*[-–—~～,，、]\s*\d+)*\s*[\]］]")
 RE_CJK = re.compile(r"[\u4e00-\u9fff]")
 RE_ASCII_ALPHA = re.compile(r"[A-Za-z]")
@@ -315,7 +318,7 @@ def is_toc_line(text: str, style_name: str = "") -> bool:
     if is_toc_style(style_name):
         return True
     t = text.strip()
-    if t.count("…") >= 2 or t.count("．") >= 4 or t.count(".") >= 8:
+    if t.count("…") >= 2 or re.search(r"[.．·]{3,}", t):
         return True
     # Word 自动目录常见形式：标题\t页码，或标题……页码
     if "\t" in t and re.search(r"\t\s*\d+\s*$", t):
@@ -452,9 +455,10 @@ def header_has_double_border(section) -> bool:
 
 
 class Linter:
-    def __init__(self, path: Path, degree: str):
+    def __init__(self, path: Path, degree: str, chapter_mode: bool = False):
         self.path = path
         self.degree = degree
+        self.chapter_mode = chapter_mode
         self.cfg = DEGREES[degree]
         self.doc = Document(str(path))
         self.paras = [p for p in self.doc.paragraphs]
@@ -508,6 +512,8 @@ class Linter:
     # -- 页眉 / 页码 ------------------------------------------------------
     def check_headers(self) -> None:
         if not self.doc.sections:
+            return
+        if self.chapter_mode:
             return
         body_section = self.doc.sections[-1]
         header_text = "\n".join(p.text for p in body_section.header.paragraphs).strip()
@@ -607,10 +613,14 @@ class Linter:
                 if m:
                     ch, sec = int(m.group(1)), int(m.group(2))
                     if ch != current_chapter:
-                        self.report.warn(
-                            "HEAD-07",
-                            f"“{t[:24]}”的章号 {ch} 与当前章 {current_chapter} 不一致",
-                        )
+                        if self.chapter_mode and current_chapter == 0:
+                            # 单章草稿：没有“第3章”标题时，以第一个 3.x 的章号为准
+                            current_chapter = ch
+                        else:
+                            self.report.warn(
+                                "HEAD-07",
+                                f"“{t[:24]}”的章号 {ch} 与当前章 {current_chapter} 不一致",
+                            )
                     level2_seq.setdefault(ch, []).append(sec)
                 self._check_heading_style(p, t, "节（1.1）", 15, "left", font, size, bold)
                 self._check_space(p, t, 12)
@@ -633,7 +643,13 @@ class Linter:
 
         self.report.metrics["headings"] = counts
         if counts["chapter"] == 0:
-            self.report.error("HEAD-08", "未识别到任何章标题（“第X章 …”）")
+            if self.chapter_mode and counts["l2"] > 0:
+                self.report.warn(
+                    "HEAD-15",
+                    "单章模式：未检测到“第X章”标题；请确认章号，并把章标题设为小 2 号黑体居中",
+                )
+            else:
+                self.report.error("HEAD-08", "未识别到任何章标题（“第X章 …”）")
         if counts["l2"] == 0:
             self.report.warn("HEAD-09", "未识别到节标题（“1.1 …”）")
 
@@ -705,12 +721,19 @@ class Linter:
                 end = i
                 break
         if start is None:
-            return
+            if self.chapter_mode:
+                for i, t in enumerate(self.texts):
+                    if classify_heading(t, self.paras[i].style.name) in ("l2", "l3"):
+                        start = i
+                        break
+            if start is None:
+                return
 
         sizes: list[float] = []
         fonts: list[str] = []
         indents = 0
         body_count = 0
+        multiple_spacings: list[float] = []
         for p, t in zip(self.paras[start:end], self.texts[start:end]):
             if not t or classify_heading(t, p.style.name) is not None:
                 continue
@@ -729,8 +752,11 @@ class Linter:
             if indent is not None and indent.cm >= 0.5:
                 indents += 1
             ls = effective_line_spacing(p)
-            if ls is not None and hasattr(ls, "pt"):
-                self._line_spacings.append(ls.pt)
+            if ls is not None:
+                if hasattr(ls, "pt"):
+                    self._line_spacings.append(ls.pt)
+                elif isinstance(ls, (int, float)):
+                    multiple_spacings.append(float(ls))
 
         if sizes:
             main_size = statistics.mode(sizes)
@@ -762,9 +788,24 @@ class Linter:
                     "FONT-06",
                     f"正文固定行距中位数为 {med} pt，通常应为 20 磅左右（每页 35 行）",
                 )
+        elif body_count:
+            if multiple_spacings:
+                med = statistics.median(multiple_spacings)
+                self.report.warn(
+                    "FONT-06",
+                    f"正文未设置固定行距，{len(multiple_spacings)} 段为 {med:g} 倍行距；"
+                    "建议改为固定 20 磅，按每页 35 行控制",
+                )
+            else:
+                self.report.warn(
+                    "FONT-06",
+                    "正文未设置固定行距（当前为默认单倍行距）；建议改为固定 20 磅，按每页 35 行控制",
+                )
 
         chars = sum(len(RE_CJK.findall(t)) for t in self.texts[start:end])
         self.report.metrics["body_chinese_chars"] = chars
+        if self.chapter_mode:
+            return
         lo, hi = self.cfg["chars"]
         if chars < lo * 0.9:
             self.report.warn(
@@ -786,6 +827,8 @@ class Linter:
 
     # -- 摘要 / 关键词 ----------------------------------------------------
     def check_abstract(self) -> None:
+        if self.chapter_mode:
+            return
         abs_idx = None
         for i, t in enumerate(self.texts):
             if re.sub(r"\s+", "", t) in {"摘要", "摘要：", "摘要:"}:
@@ -843,6 +886,8 @@ class Linter:
 
     # -- 参考文献 ---------------------------------------------------------
     def check_references(self) -> None:
+        if self.chapter_mode:
+            return
         ref_idx = None
         for i, t in enumerate(self.texts):
             if re.sub(r"\s+", "", t) in {"参考文献"}:
@@ -898,15 +943,28 @@ class Linter:
     def check_figures_tables(self) -> None:
         fig_nums: dict[int, list[int]] = {}
         tab_nums: dict[int, list[int]] = {}
+        loose_figs: list[int] = []
+        loose_tabs: list[int] = []
+        table_placeholders: list[str] = []
         for p, t in zip(self.paras, self.texts):
             if is_toc_line(t, p.style.name):
                 continue
             m = RE_FIG_CAP.match(t)
             if m:
                 fig_nums.setdefault(int(m.group(1)), []).append(int(m.group(2)))
+            else:
+                m = RE_FIG_LOOSE.match(t)
+                if m:
+                    loose_figs.append(int(m.group(1)))
             m = RE_TAB_CAP.match(t)
             if m:
                 tab_nums.setdefault(int(m.group(1)), []).append(int(m.group(2)))
+            else:
+                m = RE_TAB_LOOSE.match(t)
+                if m:
+                    loose_tabs.append(int(m.group(1)))
+            if RE_TAB_PLACEHOLDER.match(t):
+                table_placeholders.append(t[:24])
 
         def check_seq(kind: str, data: dict[int, list[int]]) -> int:
             total = 0
@@ -922,6 +980,28 @@ class Linter:
 
         n_fig = check_seq("图", fig_nums)
         n_tab = check_seq("表", tab_nums)
+        if loose_figs:
+            shown = "、".join(f"图{n}" for n in loose_figs[:5])
+            self.report.warn(
+                "CAP-03",
+                f"{len(loose_figs)} 个图题未按章编号（{shown}…），规范为“图<章号>.<序号>”（如 图3.1）",
+                "用题注并勾选“包含章节号”，正文用交叉引用；不要用 图1、图2 的全文连续编号",
+            )
+            n_fig += len(loose_figs)
+        if loose_tabs:
+            shown = "、".join(f"表{n}" for n in loose_tabs[:5])
+            self.report.warn(
+                "CAP-03",
+                f"{len(loose_tabs)} 个表题未按章编号（{shown}…），规范为“表<章号>.<序号>”（如 表3.1）",
+            )
+            n_tab += len(loose_tabs)
+        if table_placeholders:
+            self.report.warn(
+                "CAP-04",
+                f"检测到 {len(table_placeholders)} 个表题仍是占位编号“表x”：{table_placeholders[0]}",
+                "定稿前填入真实表号（如表3.1），并检查正文“表x”引用",
+            )
+            n_tab += len(table_placeholders)
         self.report.metrics["figures"] = n_fig
         self.report.metrics["tables"] = n_tab
 
@@ -966,17 +1046,25 @@ class Linter:
         ref_fields = count_ref_fields(self.doc)
         self.report.metrics["ref_fields"] = ref_fields
 
-        captions: list[tuple[str, int, int, int]] = []
+        captions: list[tuple[str, int, int, int, bool]] = []
         for i, (p, t) in enumerate(zip(self.paras, self.texts)):
             if is_toc_line(t, p.style.name):
                 continue
             m = RE_FIG_CAP.match(t)
             if m:
-                captions.append(("图", int(m.group(1)), int(m.group(2)), i))
+                captions.append(("图", int(m.group(1)), int(m.group(2)), i, False))
                 continue
             m = RE_TAB_CAP.match(t)
             if m:
-                captions.append(("表", int(m.group(1)), int(m.group(2)), i))
+                captions.append(("表", int(m.group(1)), int(m.group(2)), i, False))
+                continue
+            m = RE_FIG_LOOSE.match(t)
+            if m:
+                captions.append(("图", 0, int(m.group(1)), i, True))
+                continue
+            m = RE_TAB_LOOSE.match(t)
+            if m:
+                captions.append(("表", 0, int(m.group(1)), i, True))
 
         has_math = bool(self.doc.element.body.findall(".//" + qn("m:oMath")))
         if (captions or has_math) and ref_fields == 0:
@@ -988,8 +1076,13 @@ class Linter:
             )
 
         orphans: list[str] = []
-        for kind, ch, num, idx in captions:
-            pattern = re.compile(rf"{kind}\s*{ch}\s*[.．]\s*{num}(?!\d)")
+        for kind, ch, num, idx, loose in captions:
+            if loose:
+                pattern = re.compile(rf"{kind}\s*{num}(?!\d)")
+                label = f"{kind}{num}"
+            else:
+                pattern = re.compile(rf"{kind}\s*{ch}\s*[.．]\s*{num}(?!\d)")
+                label = f"{kind}{ch}.{num}"
             found = False
             for j, t in enumerate(self.texts):
                 if j == idx or is_toc_line(t, self.paras[j].style.name):
@@ -998,7 +1091,7 @@ class Linter:
                     found = True
                     break
             if not found:
-                orphans.append(f"{kind}{ch}.{num}")
+                orphans.append(label)
         if orphans:
             self.report.warn(
                 "XREF-02",
@@ -1008,6 +1101,8 @@ class Linter:
 
     # -- 前置部分 ---------------------------------------------------------
     def check_front_matter(self) -> None:
+        if self.chapter_mode:
+            return
         all_text = "\n".join(self.texts)
         if DECL_TITLE not in all_text:
             self.report.error("FRONT-01", "未找到“学位论文原创性声明”")
@@ -1037,12 +1132,14 @@ class Linter:
 # ---------------------------------------------------------------------------
 
 
-def print_report(report: Report) -> None:
+def print_report(report: Report, chapter_mode: bool = False) -> None:
     print("=" * 72)
     print("湖南大学研究生学位论文格式自检报告")
     print("=" * 72)
     print(f"文件：{report.file}")
     print(f"学位类型：{DEGREES[report.degree]['label']}")
+    if chapter_mode:
+        print("模式：单章草稿（跳过封面/声明/摘要/目录/参考文献与总字数检查）")
     s = report.to_dict()["summary"]
     print(f"结果：ERROR {s['errors']} 项，WARN {s['warnings']} 项，INFO {s['infos']} 项")
     if report.metrics:
@@ -1100,6 +1197,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="学位类型：doctor / master / professional（默认 master）",
     )
     parser.add_argument("--json", metavar="FILE", help="把结果同时写入 JSON 文件")
+    parser.add_argument(
+        "--chapter",
+        action="store_true",
+        help="单章草稿模式：跳过封面/声明/摘要/目录/参考文献与总字数检查",
+    )
     args = parser.parse_args(argv)
 
     path = Path(args.docx)
@@ -1111,13 +1213,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 2
 
     try:
-        linter = Linter(path, args.degree)
+        linter = Linter(path, args.degree, chapter_mode=args.chapter)
         report = linter.run()
     except Exception as exc:  # noqa: BLE001 - 给用户可读的错误
         print(f"读取失败：{exc}", file=sys.stderr)
         return 2
 
-    print_report(report)
+    print_report(report, chapter_mode=args.chapter)
     if args.json:
         Path(args.json).write_text(
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2),

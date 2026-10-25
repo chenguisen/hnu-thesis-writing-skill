@@ -142,6 +142,26 @@ class LintTest(unittest.TestCase):
             self.assertNotIn("HEAD-10", result.stdout)
             self.assertNotIn("CAP-02", result.stdout)
 
+    def test_chapter_mode_skips_front_matter_checks(self):
+        result = self.run_lint(FIXTURE, "--chapter")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("[FRONT-01]", result.stdout)
+        self.assertNotIn("[ABS-01]", result.stdout)
+        self.assertNotIn("[REF-01]", result.stdout)
+
+    def test_loose_figure_and_placeholder_table_are_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "loose.docx"
+            document = docx.Document(str(FIXTURE))
+            document.add_paragraph("图1  测试示意图")
+            document.add_paragraph("如图1所示，测试正文。")
+            document.add_paragraph("表x. 测试表")
+            document.save(str(path))
+            result = self.run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("CAP-03", result.stdout)
+            self.assertIn("CAP-04", result.stdout)
+
     def test_json_report_is_written(self):
         with tempfile.TemporaryDirectory() as td:
             report = Path(td) / "report.json"
