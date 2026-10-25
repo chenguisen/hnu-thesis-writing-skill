@@ -5,14 +5,17 @@
 从《湖南大学研究生学位论文撰写规范》提取的一套可执行写作与排版规范，包含：
 
 - 一个 AI skill（`SKILL.md`）：把规范变成写作流程、硬指标和常见错误清单；
-- 五份规范 reference（论文结构、版式、参考文献、交叉引用、提交前检查清单）和一份来源说明；
+- 五份规范 reference（论文结构、前置部分、版式、参考文献、交叉引用）和一份提交前检查清单、一份来源说明；
+- 一个骨架生成脚本：一条命令生成封面、英文内封、声明、摘要、目录、插图/附表索引、正文占位，
+  分节、页码、页眉、标题自动编号、题注域都已设好；
 - 一个仅依赖 `python-docx` 的自检脚本：检查 `.docx` 的页面、字体字号、标题、摘要、参考文献、图表、交叉引用等；
 - 一套回归测试与一个无 ERROR 的样例文档。
 
 > **版本说明**：本仓库依据的规范文档元数据创建于 **2005-08-31**，其中引用的国家标准为
-> GB7713-87、GB7714-87、GB3100～3102-86。若湖南大学研究生院/学院已发布新版模板或规范，
-> **以新版为准**；本 skill 用于新版未覆盖的细节、格式自检和写作流程。详见
-> [`references/source-and-version.md`](references/source-and-version.md)。
+> GB7713-87、GB7714-87、GB3100～3102-86。前置部分（封面/内封/声明/目录/索引）的逐行版式
+> 另参照一份 2025 年答辩通过的湖南大学博士论文实测整理（只取结构与数值，不含个人内容）。
+> 若湖南大学研究生院/学院已发布新版模板或规范，**以新版为准**；本 skill 用于新版未覆盖的细节、
+> 格式自检和写作流程。详见 [`references/source-and-version.md`](references/source-and-version.md)。
 
 ## 包含内容
 
@@ -20,13 +23,16 @@
 |---|---|
 | [`SKILL.md`](SKILL.md) | Skill 入口：何时使用、工作流、硬指标速查、常见错误 |
 | [`references/structure.md`](references/structure.md) | 论文构成、各部分的写作要求、字数与参考文献篇数 |
+| [`references/front-matter.md`](references/front-matter.md) | 封面/内封/声明/摘要/目录/索引的逐行版式、分节与页码 |
 | [`references/formatting.md`](references/formatting.md) | 页面、字体字号、页眉页脚、标题层次、图表公式、印刷装订 |
 | [`references/citations.md`](references/citations.md) | 正文引用位置、文后著录格式、GB7714 新旧版差异 |
 | [`references/checklist.md`](references/checklist.md) | 提交前逐项检查清单（含机器查不了的项目） |
 | [`references/cross-references.md`](references/cross-references.md) | 图/表/公式的题注、书签、REF 域与点击跳转 |
 | [`references/source-and-version.md`](references/source-and-version.md) | 来源、提取方法、原文错误与版本说明 |
+| [`scripts/thesis_scaffold.py`](scripts/thesis_scaffold.py) | 生成论文骨架（封面到正文占位，含域与分节） |
 | [`scripts/thesis_lint.py`](scripts/thesis_lint.py) | 对 `.docx` 做结构与格式自检 |
 | [`tests/test_lint.py`](tests/test_lint.py) | 自检脚本的回归测试 |
+| [`tests/test_scaffold.py`](tests/test_scaffold.py) | 骨架生成脚本的回归测试 |
 
 ## 快速开始
 
@@ -56,7 +62,29 @@ git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git `
 之后在对话里说“按湖南大学学位论文规范检查这篇论文”即可触发。Skill 的入口是
 `SKILL.md`，引用的细节文件都在 `references/`。
 
-### 2. 直接运行格式自检
+### 2. 生成论文骨架
+
+```bash
+python -m pip install -r requirements.txt
+python scripts/thesis_scaffold.py --out thesis.docx --degree doctor \
+  --title "面向××的××研究" --author "张三" --supervisor "×× 教授" \
+  --college "××学院" --major "××专业" --field "××方向"
+```
+
+生成结果包含：中文封面、英文内封、原创性声明与版权授权书（同一页）、中文摘要、
+Abstract、目录、插图索引、附表索引、第 1 章示例（图/表/公式/交叉引用）、结论、
+参考文献、附录 A、致谢；并且已经设好：
+
+- 6 个分节：封面（无页码）→ 声明（罗马 Ⅰ 起）→ 摘要 → 英文摘要 → 目录与索引 → 正文（阿拉伯 1 起）；
+- 奇偶页页眉（奇数页“博士学位论文/硕士学位论文”，偶数页论文题目）与 1.5 磅双线；
+- 标题自动多级编号（`第 1 章`、`1.1`、`1.1.1`），结论/参考文献/致谢/附录自动取消编号；
+- 题注域（`STYLEREF 1 \s` + `SEQ 图/表`）、目录域（`TOC \o "1-4" \h \z \u`）、
+  插图/附表索引域（`TOC \c "图"` / `\c "表"`）、正文 `REF` 超链接。
+
+打开后：替换占位符 → `Ctrl+A` → `F9` 更新域 → 检查目录/索引页码。逐行版式说明见
+[`references/front-matter.md`](references/front-matter.md)。
+
+### 3. 直接运行格式自检
 
 ```bash
 python -m pip install -r requirements.txt
@@ -101,10 +129,12 @@ python scripts/thesis_lint.py chapter3.docx --degree master --chapter
 退出码：`0` 无 ERROR（可有 WARN）；`1` 存在 ERROR；`2` 文件无法读取。
 加 `--json report.json` 可同时输出机器可读报告。
 
-### 3. 先查哪些项
+### 4. 先查哪些项
 
 脚本覆盖：A4 与页边距、页眉/页码域、标题层次与字号、正文字体字号与行距、摘要与关键词个数、
 参考文献数量与外文比例、图表题注编号、表格左右边线、REF 交叉引用域与孤图/孤表、原创性声明与目录是否存在。
+标题用 Word 自动多级编号（正文看不到“第1章”字样）时也能识别，不会误报缺章标题。
+题注编号的连续性读的是域的**缓存结果**，长期没按 F9 的文档请先更新域并保存再自检。
 **不覆盖**：内容质量、逻辑、查重、签名、印刷装订、域是否已按 F9 更新且显示正确——这些用
 [`references/checklist.md`](references/checklist.md) 人工核对。
 
@@ -162,6 +192,9 @@ python tests/test_lint.py
 
 - 规范原文：`湖南大学论文撰写规范.doc`（Word 97-2003，1,051,936 字节，文档元数据创建于
   2005-08-31）。原文件与本仓库的转换副本**不纳入公开仓库**，规范文本的著作权归湖南大学。
+- 前置部分版式另参照一份答辩通过的博士论文（2025 年，材料科学与工程学院）的 XML 实测：
+  只提取版式结构、字号、缩进、分节与域代码，**未收录该论文的任何正文、图表、姓名或题目**，
+  原文件不在仓库内。该文件里发现的 3 处残留问题记录在 `references/front-matter.md` 第 9 节。
 - 本仓库只收录整理后的操作指引、检查清单与自检代码；整理时对原文的错字、旧标准号和
   尺寸矛盾做了标注，见 `references/source-and-version.md`。
 - 代码采用 [MIT License](LICENSE)；文档与 skill 文本采用 CC BY 4.0，转载或改编请注明

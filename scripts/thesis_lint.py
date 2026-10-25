@@ -328,12 +328,23 @@ def is_toc_line(text: str, style_name: str = "") -> bool:
     return False
 
 
-def classify_heading(text: str, style_name: str = "") -> Optional[str]:
+def style_heading_level(style_name: str) -> Optional[int]:
+    """从样式名判断是第几级标题（Heading 1 / 标题 1）。"""
+    s = (style_name or "").strip().lower()
+    m = re.match(r"^(?:heading|标题)\s*([1-9])$", s)
+    return int(m.group(1)) if m else None
+
+
+def classify_heading(text: str, style_name: str = "",
+                     auto_level: Optional[int] = None) -> Optional[str]:
     t = text.strip()
     if not t or len(t) > 80:
         return None
     if is_toc_line(t, style_name):
         return None
+    # 标题用 Word 自动编号（多级列表）时，正文里只有“绪论”，没有“第1章”字样
+    if auto_level in (1, 2, 3, 4):
+        return {1: "chapter", 2: "l2", 3: "l3", 4: "l4"}[auto_level]
     m = RE_CHAPTER.match(t)
     if m:
         title = m.group(2).strip()
@@ -371,7 +382,11 @@ def get_section_start_type(section) -> Optional[str]:
     pg = section._sectPr.find(qn("w:pgNumType"))
     if pg is None:
         return None
-    return pg.get(qn("w:fmt"))
+    fmt = pg.get(qn("w:fmt"))
+    if fmt is None and pg.get(qn("w:start")) is not None:
+        # OOXML：w:pgNumType 省略 w:fmt 时按十进制处理（只设了起始页码）
+        return "decimal"
+    return fmt
 
 
 def get_page_field_count(section) -> int:
@@ -431,6 +446,17 @@ def _border_is_visible_val(val: Optional[str]) -> bool:
     return val not in (None, "nil", "none")
 
 
+DOUBLE_LINE_VALUES = {
+    "double",
+    "thinThickSmallGap",
+    "thinThickMediumGap",
+    "thinThickLargeGap",
+    "thickThinSmallGap",
+    "thickThinMediumGap",
+    "thickThinLargeGap",
+}
+
+
 def header_has_double_border(section) -> bool:
     for hdr in (section.header, section.even_page_header):
         try:
@@ -444,7 +470,7 @@ def header_has_double_border(section) -> bool:
             pbdr = ppr.find(qn("w:pBdr"))
             if pbdr is not None:
                 bottom = pbdr.find(qn("w:bottom"))
-                if bottom is not None and bottom.get(qn("w:val")) == "double":
+                if bottom is not None and bottom.get(qn("w:val")) in DOUBLE_LINE_VALUES:
                     return True
     return False
 
@@ -467,6 +493,74 @@ class Linter:
         self.report = Report(str(path), degree)
         self._body_fonts: list[tuple[str, float]] = []
         self._line_spacings: list[float] = []
+
+    # -- 标题识别 ---------------------------------------------------------
+    def _numbering_style_levels(self) -> dict[str, int]:
+        """numbering.xml 里“多级列表链接到样式”的情况：styleId -> 标题级别。"""
+        if getattr(self, "_num_style_levels", None) is not None:
+            return self._num_style_levels
+        levels: dict[str, int] = {}
+        try:
+            numbering = self.doc.part.numbering_part.element
+        except Exception:  # pragma: no cover - 文档没有 numbering 部件
+            self._num_style_levels = levels
+            return levels
+        abs_map: dict[str, dict[str, int]] = {}
+        for an in numbering.findall(qn("w:abstractNum")):
+            aid = an.get(qn("w:abstractNumId"))
+            for lvl in an.findall(qn("w:lvl")):
+                pstyle = lvl.find(qn("w:pStyle"))
+                if pstyle is None:
+                    continue
+                try:
+                    level = int(lvl.get(qn("w:ilvl"), "0")) + 1
+                except ValueError:
+                    level = 1
+                abs_map.setdefault(aid, {})[pstyle.get(qn("w:val"))] = level
+        for num in numbering.findall(qn("w:num")):
+            aid_el = num.find(qn("w:abstractNumId"))
+            if aid_el is None:
+                continue
+            for style_id, level in abs_map.get(aid_el.get(qn("w:val")), {}).items():
+                levels.setdefault(style_id, level)
+        self._num_style_levels = levels
+        return levels
+
+    def _heading_auto_level(self, p: Paragraph) -> Optional[int]:
+        """段落是带自动编号（numId≠0）的第几级标题；不是则返回 None。"""
+        level = style_heading_level(p.style.name)
+        if level is None:
+            return None
+        num_id = None
+        ppr = p._p.pPr
+        if ppr is not None:
+            numpr = ppr.find(qn("w:numPr"))
+            if numpr is not None:
+                nid = numpr.find(qn("w:numId"))
+                if nid is not None:
+                    num_id = nid.get(qn("w:val"))
+        if num_id is None:
+            style = p.style
+            while style is not None:
+                sppr = style.element.pPr
+                if sppr is not None:
+                    numpr = sppr.find(qn("w:numPr"))
+                    if numpr is not None:
+                        nid = numpr.find(qn("w:numId"))
+                        if nid is not None:
+                            num_id = nid.get(qn("w:val"))
+                            break
+                style = style.base_style
+        if num_id in (None, "0"):
+            if num_id == "0":
+                return None
+            # 多级列表直接“链接到样式”时，段落和样式上都没有 numPr
+            return self._numbering_style_levels().get(p.style.style_id)
+        return level
+
+    def _classify(self, p: Paragraph, text: str) -> Optional[str]:
+        return classify_heading(text, p.style.name,
+                                auto_level=self._heading_auto_level(p))
 
     # -- 页面 -------------------------------------------------------------
     def check_pages(self) -> None:
@@ -572,7 +666,7 @@ class Linter:
         for p, t in zip(self.paras, self.texts):
             if not t:
                 continue
-            kind = classify_heading(t, p.style.name)
+            kind = self._classify(p, t)
             if kind is None:
                 continue
             if kind in counts:
@@ -603,6 +697,11 @@ class Linter:
                             )
                         chapter_numbers.append(num)
                     current_chapter = num
+                elif kind == "chapter":
+                    # 自动编号章：正文中没有章号文字，按出现顺序推算
+                    expected = chapter_numbers[0] + len(chapter_numbers) if chapter_numbers else 1
+                    chapter_numbers.append(expected)
+                    current_chapter = expected
                 self._check_heading_style(p, t, "章", 18, "center", font, size, bold)
                 before = effective_space(p, "space_before")
                 after = effective_space(p, "space_after")
@@ -718,7 +817,7 @@ class Linter:
         start = None
         end = len(self.texts)
         for i, t in enumerate(self.texts):
-            if start is None and classify_heading(t, self.paras[i].style.name) == "chapter":
+            if start is None and self._classify(self.paras[i], t) == "chapter":
                 start = i
             if start is not None and re.sub(r"\s+", "", t) in {"参考文献"}:
                 end = i
@@ -726,7 +825,7 @@ class Linter:
         if start is None:
             if self.chapter_mode:
                 for i, t in enumerate(self.texts):
-                    if classify_heading(t, self.paras[i].style.name) in ("l2", "l3"):
+                    if self._classify(self.paras[i], t) in ("l2", "l3"):
                         start = i
                         break
             if start is None:
@@ -738,7 +837,7 @@ class Linter:
         body_count = 0
         multiple_spacings: list[float] = []
         for p, t in zip(self.paras[start:end], self.texts[start:end]):
-            if not t or classify_heading(t, p.style.name) is not None:
+            if not t or self._classify(p, t) is not None:
                 continue
             if RE_FIG_CAP.match(t) or RE_TAB_CAP.match(t):
                 continue

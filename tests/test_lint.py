@@ -91,6 +91,41 @@ class UnitTest(unittest.TestCase):
         run._r.append(instr)
         self.assertEqual(tl.count_ref_fields(document), 1)
 
+    def test_auto_numbered_heading_recognised(self):
+        # Word 自动编号时正文里只有“绪论”，没有“第1章”
+        self.assertEqual(tl.style_heading_level("Heading 1"), 1)
+        self.assertEqual(tl.style_heading_level("标题 2"), 2)
+        self.assertIsNone(tl.style_heading_level("Normal"))
+        self.assertEqual(
+            tl.classify_heading("绪论", "Heading 1", auto_level=1), "chapter"
+        )
+        self.assertEqual(
+            tl.classify_heading("研究背景", "Heading 2", auto_level=2), "l2"
+        )
+
+    def test_thick_thin_header_border_counts_as_double(self):
+        document = docx.Document()
+        section = document.sections[0]
+        p = section.header.paragraphs[0]
+        ppr = p._p.get_or_add_pPr()
+        pbdr = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(tl.qn("w:val"), "thinThickLargeGap")
+        pbdr.append(bottom)
+        ppr.append(pbdr)
+        self.assertTrue(tl.header_has_double_border(section))
+
+        bottom.set(tl.qn("w:val"), "single")
+        self.assertFalse(tl.header_has_double_border(section))
+
+    def test_pgnumtype_without_fmt_is_decimal(self):
+        document = docx.Document()
+        section = document.sections[0]
+        el = OxmlElement("w:pgNumType")
+        el.set(tl.qn("w:start"), "1")
+        section._sectPr.append(el)
+        self.assertEqual(tl.get_section_start_type(section), "decimal")
+
     def test_orphan_figure_is_reported(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "orphan.docx"

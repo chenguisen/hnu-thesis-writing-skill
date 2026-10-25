@@ -15,6 +15,30 @@
 3. 从 `.docx` 读取节属性、样式、字号、对齐、段前段后，作为版式指标的交叉验证。
 4. 按“结构 / 版式 / 引用 / 检查清单”四个维度重组为可执行 skill；不改变规范原意。
 
+## 2.1 第二个来源：一份答辩通过的博士论文（只取版式）
+
+2005 版规范只给了前置部分的文字要求（“封面用学校固定格式”“1 号黑体”等），没有可执行的
+逐行清单；为补上这一块，另外用一份 2025 年答辩通过的湖南大学博士学位论文（材料科学与
+工程学院）做了结构实测：
+
+- 读取方式：`zipfile` + `lxml` 直接解析 `word/document.xml`、`styles.xml`、`numbering.xml`、
+  `header*.xml`、`footer*.xml`，不打开、不修改原文件。
+- 提取内容：分节与页码格式、页眉页脚、封面/内封各行内容与字号缩进、声明页、目录与索引域代码、
+  题注域结构、表格边框、样式定义。
+- 数值换算：OOXML 的 twips → mm/pt（1 twip = 1/1440 英寸）。
+- **未收录**该论文的题目、姓名、导师、正文、图表、参考文献或任何个人数据；仓库里只有
+  版式规则和占位符骨架。
+- 该文件本身有 3 处残留问题（旧论文页眉、`xx 教授` 占位、页眉继承），记录在
+  `front-matter.md` 第 9 节，作为“答辩通过也未必零瑕疵”的提醒。
+
+## 2.2 脚本能做什么、不能做什么
+
+- `scripts/thesis_scaffold.py`：用 `python-docx` 按上述实测版式生成骨架；分节、页码、页眉、
+  自动编号、题注/目录/索引域都是生成时写入的 OOXML，不依赖 Word 宏。
+- 域的结果是“缓存值 + `w:dirty` 标记”：Word 打开时或按 F9 后重算；WPS 需手动
+  Ctrl+A → F9。生成器不能代替 Word 计算页码，所以**目录页码必须更新后核对**。
+- 生成器只负责骨架，不生成内容；替换占位符后仍需用 `thesis_lint.py` 与人工清单复核。
+
 > 原 `.doc` 与本 skill 的转换副本不纳入公开仓库：规范文本的著作权归湖南大学，本仓库只收录
 > 整理后的操作指引与自检代码。
 
@@ -47,9 +71,11 @@
 3. `references/formatting.md` 的页面、字体、页眉、页码。
 4. `references/citations.md` 的著录格式与标准号。
 5. `references/cross-references.md` 的题注/书签/REF 域操作。
-6. `scripts/thesis_lint.py` 中的 `DEGREES` 常量与检查阈值。
-7. `tests/fixture_master.docx` 与 `tests/test_lint.py` 的回归断言。
-8. 本文件的“版本与效力”日期。
+6. `references/front-matter.md` 的封面/内封/声明/目录/索引版式与分节页码。
+7. `scripts/thesis_lint.py` 中的 `DEGREES` 常量与检查阈值。
+8. `scripts/thesis_scaffold.py` 中的版式常量（页面、字号、分节、页眉）。
+9. `tests/fixture_master.docx`、`tests/test_lint.py`、`tests/test_scaffold.py` 的回归断言。
+10. 本文件的“版本与效力”日期。
 
 ## 6. 免责声明
 
