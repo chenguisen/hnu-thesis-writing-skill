@@ -22,6 +22,57 @@ import docx
 ROOT = Path(__file__).resolve().parent.parent
 LINT = ROOT / "scripts" / "thesis_lint.py"
 FIXTURE = Path(__file__).resolve().parent / "fixture_master.docx"
+sys.path.insert(0, str(ROOT / "scripts"))
+import thesis_lint as tl  # noqa: E402
+
+
+class UnitTest(unittest.TestCase):
+    def test_heading_without_space_after_number(self):
+        self.assertEqual(tl.classify_heading("1.1研究背景"), "l2")
+        self.assertEqual(tl.classify_heading("1.1.1研究现状"), "l3")
+        self.assertEqual(tl.classify_heading("1.1.1.1国外现状"), "l4")
+
+    def test_toc_tab_leader_is_not_heading(self):
+        self.assertTrue(tl.is_toc_line("第1章 绪论\t1"))
+        self.assertTrue(tl.is_toc_line("1.1 研究背景\t2"))
+        self.assertIsNone(tl.classify_heading("1.1 研究背景\t2"))
+
+    def test_toc_style_is_not_heading(self):
+        self.assertTrue(tl.is_toc_line("1.1 研究背景", "TOC 2"))
+        self.assertIsNone(tl.classify_heading("第1章 绪论", "TOC 1"))
+
+    def test_explicit_nil_table_borders_override_grid_style(self):
+        document = docx.Document()
+        table = document.add_table(rows=1, cols=1)
+        table.style = "Table Grid"
+        self.assertTrue(tl.table_has_side_borders(table))
+
+        # 显式把左右边线设为 nil 后，不应再按 Table Grid 误报
+        tbl_pr = table._tbl.tblPr
+        borders = tbl_pr.find(tl.qn("w:tblBorders"))
+        if borders is None:
+            from docx.oxml import OxmlElement
+
+            borders = OxmlElement("w:tblBorders")
+            tbl_pr.append(borders)
+        for side in ("left", "right"):
+            el = borders.find(tl.qn("w:" + side))
+            if el is None:
+                from docx.oxml import OxmlElement
+
+                el = OxmlElement("w:" + side)
+                borders.append(el)
+            el.set(tl.qn("w:val"), "nil")
+        self.assertFalse(tl.table_has_side_borders(table))
+
+    def test_paragraph_format_from_style(self):
+        document = docx.Document()
+        normal = document.styles["Normal"]
+        normal.paragraph_format.first_line_indent = docx.shared.Pt(24)
+        normal.paragraph_format.line_spacing = docx.shared.Pt(20)
+        p = document.add_paragraph("测试段落" * 10)
+        self.assertEqual(tl.effective_first_line_indent(p), docx.shared.Pt(24))
+        self.assertEqual(tl.effective_line_spacing(p), docx.shared.Pt(20))
 
 
 class LintTest(unittest.TestCase):
@@ -47,6 +98,25 @@ class LintTest(unittest.TestCase):
             result = self.run_lint(bad)
             self.assertEqual(result.returncode, 1, result.stdout)
             self.assertIn("PAGE-02", result.stdout)
+
+    def test_toc_tab_leader_does_not_trigger_heading_warnings(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "with_toc.docx"
+            document = docx.Document(str(FIXTURE))
+            for text in (
+                "第1章 绪论\t1",
+                "1.1 研究背景与意义\t2",
+                "1.1.1 国内外研究现状\t3",
+                "第2章 理论基础\t4",
+                "参考文献\t5",
+            ):
+                document.add_paragraph(text)
+            document.save(str(path))
+            result = self.run_lint(path)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertNotIn("HEAD-04", result.stdout)
+            self.assertNotIn("HEAD-10", result.stdout)
+            self.assertNotIn("CAP-02", result.stdout)
 
     def test_json_report_is_written(self):
         with tempfile.TemporaryDirectory() as td:

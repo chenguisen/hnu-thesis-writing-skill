@@ -34,13 +34,22 @@
 把仓库放到技能目录（二选一，取决于你的 agent 客户端）：
 
 ```bash
-# DSH / 通用 agent skills
+# macOS / Linux / Git Bash：DSH / 通用 agent skills
 git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git \
   ~/.agents/skills/hnu-thesis-writing
 
-# Claude Code
+# macOS / Linux / Git Bash：Claude Code
 git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git \
   ~/.claude/skills/hnu-thesis-writing
+```
+
+```powershell
+# Windows PowerShell（~ 不会展开，需用 $env:USERPROFILE）
+git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git `
+  "$env:USERPROFILE\.agents\skills\hnu-thesis-writing"
+
+git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git `
+  "$env:USERPROFILE\.claude\skills\hnu-thesis-writing"
 ```
 
 之后在对话里说“按湖南大学学位论文规范检查这篇论文”即可触发。Skill 的入口是
@@ -128,8 +137,9 @@ python -m unittest discover -s tests -v
 python tests/test_lint.py
 ```
 
-测试使用 [`tests/fixture_master.docx`](tests/fixture_master.docx) 作为合规样例；
-`test_non_a4_page_is_an_error` 会把页面改成 Letter，确认脚本能报出 ERROR。
+测试使用 [`tests/fixture_master.docx`](tests/fixture_master.docx) 作为 0 ERROR 的最小回归样例
+（示例内容为占位，因此有 4 条 WARN）；`test_non_a4_page_is_an_error` 会把页面改成 Letter，
+确认脚本能报出 ERROR。
 
 ## 来源与许可
 

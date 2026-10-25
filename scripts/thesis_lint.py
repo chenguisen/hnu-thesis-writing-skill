@@ -80,11 +80,12 @@ SIZE = {
 HEITI = ("黑体", "SimHei", "Microsoft YaHei", "微软雅黑")
 SONGTI = ("宋体", "SimSun", "NSimSun")
 
+_NUM_SEP = r"(?:\s+|(?=[\u4e00-\u9fff]))"
 RE_CHAPTER = re.compile(r"^第\s*(\d+)\s*章[\s　]*(.*)$")
-RE_L2 = re.compile(r"^(\d+)\s*[.．]\s*(\d+)[\s　]+(\S.*)$")
-RE_L3 = re.compile(r"^(\d+)\s*[.．]\s*(\d+)\s*[.．]\s*(\d+)[\s　]+(\S.*)$")
+RE_L2 = re.compile(r"^(\d+)\s*[.．]\s*(\d+)" + _NUM_SEP + r"(\S.*)$")
+RE_L3 = re.compile(r"^(\d+)\s*[.．]\s*(\d+)\s*[.．]\s*(\d+)" + _NUM_SEP + r"(\S.*)$")
 RE_L4 = re.compile(
-    r"^(\d+)\s*[.．]\s*(\d+)\s*[.．]\s*(\d+)\s*[.．]\s*(\d+)[\s　]+(\S.*)$"
+    r"^(\d+)\s*[.．]\s*(\d+)\s*[.．]\s*(\d+)\s*[.．]\s*(\d+)" + _NUM_SEP + r"(\S.*)$"
 )
 RE_ITEM = re.compile(r"^[（(]\s*\d+\s*[）)]")
 RE_REF_ENTRY = re.compile(r"^\s*[\[［]\s*(\d+)\s*[\]］]")
@@ -263,27 +264,72 @@ def effective_bold(paragraph: Paragraph) -> Optional[bool]:
     return style_bold(paragraph.style)
 
 
+def style_pf_value(style, attr: str):
+    """沿样式继承链读取段落格式；直接格式为 None 时使用。"""
+    for st in _style_chain(style):
+        val = getattr(st.paragraph_format, attr)
+        if val is not None:
+            return val
+    return None
+
+
 def effective_alignment(paragraph: Paragraph):
     al = paragraph.paragraph_format.alignment
     if al is not None:
         return al
-    return paragraph.style.paragraph_format.alignment
+    return style_pf_value(paragraph.style, "alignment")
+
+
+def effective_first_line_indent(paragraph: Paragraph):
+    val = paragraph.paragraph_format.first_line_indent
+    if val is not None:
+        return val
+    return style_pf_value(paragraph.style, "first_line_indent")
+
+
+def effective_line_spacing(paragraph: Paragraph):
+    val = paragraph.paragraph_format.line_spacing
+    if val is not None:
+        return val
+    return style_pf_value(paragraph.style, "line_spacing")
+
+
+def effective_space(paragraph: Paragraph, attr: str):
+    val = getattr(paragraph.paragraph_format, attr)
+    if val is not None:
+        return val
+    return style_pf_value(paragraph.style, attr)
 
 
 def paragraph_text(p: Paragraph) -> str:
     return p.text.replace("\u00a0", " ").strip()
 
 
-def is_toc_line(text: str) -> bool:
-    """目录/索引行：含连续点线或大量省略号，不能当作标题。"""
-    return text.count("…") >= 2 or text.count("．") >= 4 or text.count(".") >= 8
+def is_toc_style(style_name: str) -> bool:
+    s = (style_name or "").lower()
+    return "toc" in s or "目录" in (style_name or "")
 
 
-def classify_heading(text: str) -> Optional[str]:
+def is_toc_line(text: str, style_name: str = "") -> bool:
+    """目录/索引行：TOC 样式、点线、或“标题 + 制表符 + 页码”，不能当作标题。"""
+    if is_toc_style(style_name):
+        return True
+    t = text.strip()
+    if t.count("…") >= 2 or t.count("．") >= 4 or t.count(".") >= 8:
+        return True
+    # Word 自动目录常见形式：标题\t页码，或标题……页码
+    if "\t" in t and re.search(r"\t\s*\d+\s*$", t):
+        return True
+    if re.search(r"[.．·]{3,}\s*\d+\s*$", t):
+        return True
+    return False
+
+
+def classify_heading(text: str, style_name: str = "") -> Optional[str]:
     t = text.strip()
     if not t or len(t) > 80:
         return None
-    if is_toc_line(t):
+    if is_toc_line(t, style_name):
         return None
     m = RE_CHAPTER.match(t)
     if m:
@@ -330,21 +376,46 @@ def get_page_field_count(section) -> int:
     return xml.count("PAGE")
 
 
+def _border_is_visible(el) -> bool:
+    return el is not None and el.get(qn("w:val")) not in (None, "nil", "none")
+
+
 def table_has_side_borders(table: Table) -> bool:
-    style_name = getattr(getattr(table, "style", None), "name", "") or ""
-    if style_name in ("Table Grid", "网格型", "网格表"):
-        return True
+    # 单元格级边线优先级最高
+    for row in table.rows:
+        for cell in row.cells:
+            tc_pr = cell._tc.tcPr
+            if tc_pr is None:
+                continue
+            borders = tc_pr.find(qn("w:tcBorders"))
+            if borders is None:
+                continue
+            for side in ("left", "right"):
+                if _border_is_visible(borders.find(qn("w:" + side))):
+                    return True
+
     tbl_pr = table._tbl.tblPr
-    if tbl_pr is None:
+    explicit: dict[str, Optional[str]] = {}
+    if tbl_pr is not None:
+        borders = tbl_pr.find(qn("w:tblBorders"))
+        if borders is not None:
+            for side in ("left", "right"):
+                el = borders.find(qn("w:" + side))
+                if el is not None:
+                    explicit[side] = el.get(qn("w:val"))
+
+    # 显式设置优先于表格样式：左右都设为 nil 时不应再按 Table Grid 误报
+    if any(_border_is_visible_val(v) for v in explicit.values()):
+        return True
+    if len(explicit) == 2 and all(not _border_is_visible_val(v) for v in explicit.values()):
         return False
-    borders = tbl_pr.find(qn("w:tblBorders"))
-    if borders is None:
-        return False
-    for side in ("left", "right"):
-        el = borders.find(qn("w:" + side))
-        if el is not None and el.get(qn("w:val")) not in ("nil", "none"):
-            return True
-    return False
+
+    style_name = getattr(getattr(table, "style", None), "name", "") or ""
+    return style_name in ("Table Grid", "网格型", "网格表")
+
+
+def _border_is_visible_val(val: Optional[str]) -> bool:
+    return val not in (None, "nil", "none")
 
 
 def header_has_double_border(section) -> bool:
@@ -449,15 +520,22 @@ class Linter:
                 "页眉段落未检测到双线边框",
                 "页眉下边框设为双线、1.5 磅，粗线在上",
             )
-        if get_page_field_count(body_section) == 0:
+        numbered_sections = self.doc.sections[1:] if len(self.doc.sections) > 1 else self.doc.sections
+        first_number = 2 if len(self.doc.sections) > 1 else 1
+        missing_pages = [
+            i
+            for i, s in enumerate(numbered_sections, start=first_number)
+            if get_page_field_count(s) == 0
+        ]
+        if missing_pages:
             self.report.warn(
                 "PAGE-05",
-                "页脚未检测到 PAGE 域",
-                "插入页码域，不要手工输入数字",
+                f"第 {missing_pages} 节页脚未检测到 PAGE 域",
+                "插入页码域，不要手工输入数字；前置罗马、正文阿拉伯需分节设置",
             )
         fmts = [get_section_start_type(s) for s in self.doc.sections]
         has_roman = any(f in ("lowerRoman", "upperRoman") for f in fmts)
-        has_decimal = any(f in ("decimal", None) for f in fmts)
+        has_decimal = any(f == "decimal" for f in fmts)
         if len(self.doc.sections) > 1 and not has_roman:
             self.report.warn(
                 "PAGE-06",
@@ -478,7 +556,7 @@ class Linter:
         for p, t in zip(self.paras, self.texts):
             if not t:
                 continue
-            kind = classify_heading(t)
+            kind = classify_heading(t, p.style.name)
             if kind is None:
                 continue
             if kind in counts:
@@ -486,7 +564,6 @@ class Linter:
             font = effective_font(p) or ""
             size = effective_size(p)
             bold = effective_bold(p)
-            align = p.paragraph_format.alignment
 
             if kind in ("chapter", "special"):
                 # “结论/参考文献/致谢”也可能是论文构成清单中的一行；
@@ -508,9 +585,11 @@ class Linter:
                             f"章编号不连续：期望第 {expected} 章，实际“{t[:20]}”",
                         )
                 self._check_heading_style(p, t, "章", 18, "center", font, size, bold)
-                if p.paragraph_format.space_before and p.paragraph_format.space_before.pt < 12:
+                before = effective_space(p, "space_before")
+                after = effective_space(p, "space_after")
+                if before is not None and before.pt < 12:
                     self.report.warn("HEAD-05", f"“{t[:20]}”段前间距偏小，章标题上下应各空一行")
-                if p.paragraph_format.space_after and p.paragraph_format.space_after.pt < 12:
+                if after is not None and after.pt < 12:
                     self.report.warn("HEAD-06", f"“{t[:20]}”段后间距偏小，章标题上下应各空一行")
 
             elif kind == "l2":
@@ -592,8 +671,8 @@ class Linter:
             )
 
     def _check_space(self, p: Paragraph, text: str, expected: float) -> None:
-        before = p.paragraph_format.space_before
-        after = p.paragraph_format.space_after
+        before = effective_space(p, "space_before")
+        after = effective_space(p, "space_after")
         if before is not None and before.pt < expected - 1:
             self.report.warn(
                 "HEAD-13",
@@ -610,7 +689,7 @@ class Linter:
         start = None
         end = len(self.texts)
         for i, t in enumerate(self.texts):
-            if start is None and classify_heading(t) == "chapter":
+            if start is None and classify_heading(t, self.paras[i].style.name) == "chapter":
                 start = i
             if start is not None and re.sub(r"\s+", "", t) in {"参考文献"}:
                 end = i
@@ -623,7 +702,7 @@ class Linter:
         indents = 0
         body_count = 0
         for p, t in zip(self.paras[start:end], self.texts[start:end]):
-            if not t or classify_heading(t) is not None:
+            if not t or classify_heading(t, p.style.name) is not None:
                 continue
             if RE_FIG_CAP.match(t) or RE_TAB_CAP.match(t):
                 continue
@@ -636,10 +715,10 @@ class Linter:
                 sizes.append(s)
             if f:
                 fonts.append(f)
-            if p.paragraph_format.first_line_indent is not None:
-                if p.paragraph_format.first_line_indent.cm >= 0.5:
-                    indents += 1
-            ls = p.paragraph_format.line_spacing
+            indent = effective_first_line_indent(p)
+            if indent is not None and indent.cm >= 0.5:
+                indents += 1
+            ls = effective_line_spacing(p)
             if ls is not None and hasattr(ls, "pt"):
                 self._line_spacings.append(ls.pt)
 
@@ -809,8 +888,8 @@ class Linter:
     def check_figures_tables(self) -> None:
         fig_nums: dict[int, list[int]] = {}
         tab_nums: dict[int, list[int]] = {}
-        for t in self.texts:
-            if is_toc_line(t):
+        for p, t in zip(self.paras, self.texts):
+            if is_toc_line(t, p.style.name):
                 continue
             m = RE_FIG_CAP.match(t)
             if m:
@@ -842,7 +921,7 @@ class Linter:
             if not isinstance(block, Paragraph):
                 continue
             t = paragraph_text(block)
-            if is_toc_line(t):
+            if is_toc_line(t, block.style.name):
                 continue
             if RE_TAB_CAP.match(t):
                 nxt = block_list[i + 1] if i + 1 < len(block_list) else None
