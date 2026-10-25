@@ -1259,6 +1259,7 @@ def print_report(report: Report, chapter_mode: bool = False) -> None:
             "body_font": "正文主字体",
             "body_line_spacing_pt": "正文固定行距(pt)",
             "in_text_citations": "正文引用标注数",
+            "ref_fields": "REF 交叉引用域",
         }
         for key, label in labels.items():
             if key in report.metrics:

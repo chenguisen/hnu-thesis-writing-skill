@@ -35,10 +35,11 @@ description: >
 ## 工作流
 
 1. **定框架**：按 `references/structure.md` 列出章节与前置部分，先确定每章目标字数。
-2. **建骨架**：优先运行 `python scripts/thesis_scaffold.py --out thesis.docx --degree doctor
-   --title "题目"`，它会生成封面、英文内封、声明、摘要、目录、插图/附表索引、正文占位，
-   并把分节、页码、页眉、标题自动编号和题注域都设好；再按 `references/front-matter.md`
-   替换占位符。也可以从研究生院下载当前模板复制一份，但不要从空白文档手工搭版式。
+2. **建骨架（原样抽取，不要手搭）**：从研究生院模板或一份已通过答辩的同门论文里抽取前置部分：
+   `python scripts/extract_front_matter.py --source 已通过论文.docx --out thesis.docx
+   --title "题目" --author "姓名" --student-id B00000000`。
+   脚本直接复制原文档的段落 XML（间距、对齐、缩进、制表位、行距、分节、页眉页脚、目录/题注域），
+   只替换文字，因此版式与原文件逐像素一致。按规范从零搭封面/内封一定会走样（字号、缩进、制表位对不上）。
 3. **写内容**：先内容后格式。每章另起一页；章标题 ≤15 字、无标点；结论单独一章、不加章号。
 4. **排版**：按 `references/formatting.md` 设置样式。优先改“样式”，不要逐段手工加粗/改字号；
    图/表用题注、公式用书签，正文用交叉引用域，确保编号自动更新且可点击跳转（见
@@ -126,7 +127,7 @@ description: >
 | `references/checklist.md`          | 提交前逐项检查清单（含机器查不了的项目）       |
 | `references/cross-references.md`   | 图/表/公式的题注、书签、REF 域与点击跳转    |
 | `references/source-and-version.md` | 来源、提取方法、原文错误与版本说明          |
-| `scripts/thesis_scaffold.py`       | 生成论文骨架（封面到正文占位，含域与分节）      |
+| `scripts/extract_front_matter.py`  | 从已通过论文/模板原样抽取前置部分，只换文字      |
 | `scripts/thesis_lint.py`           | 对 `.docx` 做结构与格式自检         |
 
 ## 输出约定

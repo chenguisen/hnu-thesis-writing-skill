@@ -33,11 +33,15 @@
 
 ## 2.2 脚本能做什么、不能做什么
 
-- `scripts/thesis_scaffold.py`：用 `python-docx` 按上述实测版式生成骨架；分节、页码、页眉、
-  自动编号、题注/目录/索引域都是生成时写入的 OOXML，不依赖 Word 宏。
-- 域的结果是“缓存值 + `w:dirty` 标记”：Word 打开时或按 F9 后重算；WPS 需手动
-  Ctrl+A → F9。生成器不能代替 Word 计算页码，所以**目录页码必须更新后核对**。
-- 生成器只负责骨架，不生成内容；替换占位符后仍需用 `thesis_lint.py` 与人工清单复核。
+- `scripts/extract_front_matter.py`：定位源文档正文第 1 章（Heading 1 + 自动编号），把前面
+  所有块 `deepcopy` 进新文档，再按标签替换文字（学号、姓名、导师、题目、日期、摘要正文、
+  关键词），并清掉旧的页眉题目、把声明页页眉统一成摘要节的正确页眉。**不做版式换算**，
+  所以段落属性与原文件逐字节一致；这也是它能保证“间距、对齐不走样”的原因。
+- 只替换文字，不重排：如果新题目比原题目短，分页位置会变（例如原封面题目两行、新题目一行），
+  这是文本长度变化，不是版式被改。
+- 域的结果仍是原文档的缓存值：打开后 Ctrl+A → F9 重算目录/索引；WPS 也要手动更新。
+- 生成器不能判断“原文档本身是否正确”。抽取前先用 `thesis_lint.py` 检查源文件；
+  源文件里的错误（例如旧页眉、`xx 教授` 占位）会被一并继承，脚本只修了页眉文字这一项。
 
 > 原 `.doc` 与本 skill 的转换副本不纳入公开仓库：规范文本的著作权归湖南大学，本仓库只收录
 > 整理后的操作指引与自检代码。
@@ -73,8 +77,8 @@
 5. `references/cross-references.md` 的题注/书签/REF 域操作。
 6. `references/front-matter.md` 的封面/内封/声明/目录/索引版式与分节页码。
 7. `scripts/thesis_lint.py` 中的 `DEGREES` 常量与检查阈值。
-8. `scripts/thesis_scaffold.py` 中的版式常量（页面、字号、分节、页眉）。
-9. `tests/fixture_master.docx`、`tests/test_lint.py`、`tests/test_scaffold.py` 的回归断言。
+8. `scripts/extract_front_matter.py` 里的替换标签（封面字段、英文内封字段、摘要/关键词）。
+9. `tests/fixture_master.docx`、`tests/test_lint.py`、`tests/test_extract_front_matter.py` 的回归断言。
 10. 本文件的“版本与效力”日期。
 
 ## 6. 免责声明

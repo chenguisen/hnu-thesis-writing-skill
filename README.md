@@ -6,8 +6,8 @@
 
 - 一个 AI skill（`SKILL.md`）：把规范变成写作流程、硬指标和常见错误清单；
 - 五份规范 reference（论文结构、前置部分、版式、参考文献、交叉引用）和一份提交前检查清单、一份来源说明；
-- 一个骨架生成脚本：一条命令生成封面、英文内封、声明、摘要、目录、插图/附表索引、正文占位，
-  分节、页码、页眉、标题自动编号、题注域都已设好；
+- 一个骨架抽取脚本：从已通过答辩的论文（或校模板）里**原样复制**前置部分的段落 XML——
+  间距、对齐、缩进、制表位、行距、分节、页眉页脚、目录/题注域全部保留，只替换文字；
 - 一个仅依赖 `python-docx` 的自检脚本：检查 `.docx` 的页面、字体字号、标题、摘要、参考文献、图表、交叉引用等；
 - 一套回归测试与一个无 ERROR 的样例文档。
 
@@ -29,10 +29,10 @@
 | [`references/checklist.md`](references/checklist.md) | 提交前逐项检查清单（含机器查不了的项目） |
 | [`references/cross-references.md`](references/cross-references.md) | 图/表/公式的题注、书签、REF 域与点击跳转 |
 | [`references/source-and-version.md`](references/source-and-version.md) | 来源、提取方法、原文错误与版本说明 |
-| [`scripts/thesis_scaffold.py`](scripts/thesis_scaffold.py) | 生成论文骨架（封面到正文占位，含域与分节） |
+| [`scripts/extract_front_matter.py`](scripts/extract_front_matter.py) | 从已通过论文/模板原样抽取前置部分，只换文字 |
 | [`scripts/thesis_lint.py`](scripts/thesis_lint.py) | 对 `.docx` 做结构与格式自检 |
 | [`tests/test_lint.py`](tests/test_lint.py) | 自检脚本的回归测试 |
-| [`tests/test_scaffold.py`](tests/test_scaffold.py) | 骨架生成脚本的回归测试 |
+| [`tests/test_extract_front_matter.py`](tests/test_extract_front_matter.py) | 抽取脚本的回归测试 |
 
 ## 快速开始
 
@@ -62,27 +62,31 @@ git clone https://github.com/chenguisen/hnu-thesis-writing-skill.git `
 之后在对话里说“按湖南大学学位论文规范检查这篇论文”即可触发。Skill 的入口是
 `SKILL.md`，引用的细节文件都在 `references/`。
 
-### 2. 生成论文骨架
+### 2. 抽取论文骨架（保留原版式）
+
+**不要按规范手搭封面/内封**——字号、缩进、制表位、行距很难复原。正确做法是从一份
+已通过答辩的论文（或校模板）里原样抽取：
 
 ```bash
 python -m pip install -r requirements.txt
-python scripts/thesis_scaffold.py --out thesis.docx --degree doctor \
-  --title "面向××的××研究" --author "张三" --supervisor "×× 教授" \
-  --college "××学院" --major "××专业" --field "××方向"
+python scripts/extract_front_matter.py \
+  --source 陈桂森-博士学位论文.docx \
+  --out thesis.docx \
+  --title "面向××的××研究" --author "张三" --student-id B00000000 \
+  --supervisor "×× 教授" --college "××学院" --major "××专业" --field "××方向"
 ```
 
-生成结果包含：中文封面、英文内封、原创性声明与版权授权书（同一页）、中文摘要、
-Abstract、目录、插图索引、附表索引、第 1 章示例（图/表/公式/交叉引用）、结论、
-参考文献、附录 A、致谢；并且已经设好：
+脚本做的事：把源文档“第 1 章”之前的所有块（封面、英文内封、声明、摘要、目录、索引）
+**深拷贝**到新文档，再按标签替换文字；随后接上第 1 章、结论、参考文献、附录、致谢的
+标题骨架。因此：
 
-- 6 个分节：封面（无页码）→ 声明（罗马 Ⅰ 起）→ 摘要 → 英文摘要 → 目录与索引 → 正文（阿拉伯 1 起）；
-- 奇偶页页眉（奇数页“博士学位论文/硕士学位论文”，偶数页论文题目）与 1.5 磅双线；
-- 标题自动多级编号（`第 1 章`、`1.1`、`1.1.1`），结论/参考文献/致谢/附录自动取消编号；
-- 题注域（`STYLEREF 1 \s` + `SEQ 图/表`）、目录域（`TOC \o "1-4" \h \z \u`）、
-  插图/附表索引域（`TOC \c "图"` / `\c "表"`）、正文 `REF` 超链接。
+- 每个段落的 `pPr/rPr`（段前段后、行距、首行缩进、制表位、对齐、字体）与原文件逐字节一致；
+- 分节、页码格式、奇偶页页眉页脚、页眉双线、目录/索引/题注域全部沿用；
+- 只替换了姓名、学号、导师、题目、日期、摘要正文等文字，以及声明页的旧页眉。
 
-打开后：替换占位符 → `Ctrl+A` → `F9` 更新域 → 检查目录/索引页码。逐行版式说明见
+产出还有两点需要手动做：替换其余占位符；`Ctrl+A` → `F9` 更新目录/索引。逐行版式说明见
 [`references/front-matter.md`](references/front-matter.md)。
+
 
 ### 3. 直接运行格式自检
 
