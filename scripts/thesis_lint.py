@@ -79,6 +79,13 @@ SIZE = {
 
 HEITI = ("黑体", "SimHei", "Microsoft YaHei", "微软雅黑")
 SONGTI = ("宋体", "SimSun", "NSimSun")
+# 把西文/数字排成中文字体（校模板要求西文用 Times New Roman）
+CJK_ASCII_FONTS = (
+    "宋体", "黑体", "仿宋", "楷体", "微软雅黑", "华文宋体", "华文黑体",
+    "SimSun", "SimHei", "NSimSun", "FangSong", "KaiTi", "Microsoft YaHei",
+)
+LATIN_FONT = "Times New Roman"
+RE_LATIN = re.compile(r"[A-Za-z0-9]")
 
 _NUM_SEP = r"(?:\s+|(?=[\u4e00-\u9fff]))"
 RE_CHAPTER = re.compile(r"^第\s*(\d+)\s*章[\s　]*(.*)$")
@@ -402,6 +409,70 @@ def count_ref_fields(doc) -> int:
         if re.search(r"\bREF\b", text):
             n += 1
     return n
+
+
+def _iter_hdr_ftr_run_elements(doc):
+    try:
+        from docx.parts.hdrftr import FooterPart, HeaderPart
+    except ImportError:  # pragma: no cover
+        return
+    for part in getattr(doc.part.package, "parts", []):
+        if isinstance(part, (HeaderPart, FooterPart)):
+            element = getattr(part, "element", None)
+            if element is not None:
+                for r in element.iter(qn("w:r")):
+                    yield r
+
+
+def latin_in_cjk_font_usage(doc) -> tuple[int, list[str], list[str]]:
+    """西文/数字被排成中文字体的 run 数、样例文字、涉及的在用样式。
+
+    校模板（含答辩版论文）的样式是 eastAsia=宋体/黑体 + ascii=Times New Roman；
+    若 ascii 被写成宋体/黑体，英文与数字就会用中文字体排。
+    """
+    runs = 0
+    samples: list[str] = []
+
+    def check(element):
+        nonlocal runs
+        for r in element.iter(qn("w:r")):
+            text = "".join(t.text or "" for t in r.iter(qn("w:t")))
+            if not RE_LATIN.search(text):
+                continue
+            rpr = r.find(qn("w:rPr"))
+            rfonts = rpr.find(qn("w:rFonts")) if rpr is not None else None
+            if rfonts is None:
+                continue
+            if rfonts.get(qn("w:ascii")) in CJK_ASCII_FONTS:
+                runs += 1
+                if len(samples) < 8:
+                    samples.append(text.strip()[:24])
+
+    check(doc.element.body)
+    for r in _iter_hdr_ftr_run_elements(doc):
+        text = "".join(t.text or "" for t in r.iter(qn("w:t")))
+        if not RE_LATIN.search(text):
+            continue
+        rpr = r.find(qn("w:rPr"))
+        rfonts = rpr.find(qn("w:rFonts")) if rpr is not None else None
+        if rfonts is not None and rfonts.get(qn("w:ascii")) in CJK_ASCII_FONTS:
+            runs += 1
+
+    used = set()
+    for p in doc.paragraphs:
+        style = getattr(p, "style", None)
+        if style is not None and style.name:
+            used.add(style.name)
+    styles: list[str] = []
+    for style in doc.styles:
+        if style.name not in used:
+            continue
+        element = getattr(style, "element", None)
+        rpr = element.find(qn("w:rPr")) if element is not None else None
+        rfonts = rpr.find(qn("w:rFonts")) if rpr is not None else None
+        if rfonts is not None and rfonts.get(qn("w:ascii")) in CJK_ASCII_FONTS:
+            styles.append(style.name)
+    return runs, samples, styles
 
 
 def _border_is_visible(el) -> bool:
@@ -1215,6 +1286,25 @@ class Linter:
         if "湖南大学" not in all_text:
             self.report.warn("FRONT-04", "全文未出现“湖南大学”，请确认封面/内封")
 
+    # -- 中英文字体分工 ---------------------------------------------------
+    def check_latin_fonts(self) -> None:
+        runs, samples, styles = latin_in_cjk_font_usage(self.doc)
+        self.report.metrics["latin_cjk_runs"] = runs
+        if runs < 5 and not styles:
+            return
+        parts = [f"检测到 {runs} 处西文/数字用中文字体排"]
+        if styles:
+            shown = "、".join(styles[:4]) + ("等" if len(styles) > 4 else "")
+            parts.append(f"样式 {shown} 的西文字体也是中文字体")
+        if samples:
+            parts.append("如“" + "”“".join(samples[:3]) + "”")
+        self.report.warn(
+            "FONT-07",
+            "；".join(parts) + f"。校模板要求西文与数字用 {LATIN_FONT}（中文字体不变）",
+            "python scripts/fix_latin_fonts.py thesis.docx --in-place；"
+            f"或在 Word 里把样式/文字的“西文字体”设为 {LATIN_FONT}，中文字体保持宋体/黑体",
+        )
+
     # -- 汇总 -------------------------------------------------------------
     def run(self) -> Report:
         self.check_pages()
@@ -1223,6 +1313,7 @@ class Linter:
         self.check_headings()
         self.check_abstract()
         self.check_body()
+        self.check_latin_fonts()
         self.check_references()
         self.check_figures_tables()
         self.check_cross_references()
@@ -1260,6 +1351,7 @@ def print_report(report: Report, chapter_mode: bool = False) -> None:
             "body_line_spacing_pt": "正文固定行距(pt)",
             "in_text_citations": "正文引用标注数",
             "ref_fields": "REF 交叉引用域",
+            "latin_cjk_runs": "西文误用中文字体（run）",
         }
         for key, label in labels.items():
             if key in report.metrics:

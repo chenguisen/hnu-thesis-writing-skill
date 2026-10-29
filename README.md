@@ -9,6 +9,7 @@
 - 一个骨架抽取脚本：从已通过答辩的论文（或校模板）里**原样复制**前置部分的段落 XML——
   间距、对齐、缩进、制表位、行距、分节、页眉页脚、目录/题注域全部保留，只替换文字；
 - 一个仅依赖 `python-docx` 的自检脚本：检查 `.docx` 的页面、字体字号、标题、摘要、参考文献、图表、交叉引用等；
+- 一个字体修正脚本：把西文与数字统一成 Times New Roman（中文字体不动），对应自检的 `FONT-07`；
 - 一套回归测试与一个无 ERROR 的样例文档。
 
 > **版本说明**：本仓库依据的规范文档元数据创建于 **2005-08-31**，其中引用的国家标准为
@@ -30,8 +31,10 @@
 | [`references/cross-references.md`](references/cross-references.md) | 图/表/公式的题注、书签、REF 域与点击跳转 |
 | [`references/source-and-version.md`](references/source-and-version.md) | 来源、提取方法、原文错误与版本说明 |
 | [`scripts/extract_front_matter.py`](scripts/extract_front_matter.py) | 从已通过论文/模板原样抽取前置部分，只换文字 |
+| [`scripts/fix_latin_fonts.py`](scripts/fix_latin_fonts.py) | 把西文/数字统一为 Times New Roman，不改中文字体 |
 | [`scripts/thesis_lint.py`](scripts/thesis_lint.py) | 对 `.docx` 做结构与格式自检 |
 | [`tests/test_lint.py`](tests/test_lint.py) | 自检脚本的回归测试 |
+| [`tests/test_fix_latin_fonts.py`](tests/test_fix_latin_fonts.py) | 字体修正脚本的回归测试 |
 | [`tests/test_extract_front_matter.py`](tests/test_extract_front_matter.py) | 抽取脚本的回归测试 |
 
 ## 快速开始
@@ -133,9 +136,23 @@ python scripts/thesis_lint.py chapter3.docx --degree master --chapter
 退出码：`0` 无 ERROR（可有 WARN）；`1` 存在 ERROR；`2` 文件无法读取。
 加 `--json report.json` 可同时输出机器可读报告。
 
+### 3.1 西文字体不对时批量修
+
+校模板的样式是“中文宋体/黑体 + 西文 Times New Roman”；如果 `rFonts/@w:ascii` 被写成了宋体，
+英文和数字就会用中文字体排，字宽和换行都跟模板对不上（自检报 `FONT-07`）。修法：
+
+```bash
+python scripts/fix_latin_fonts.py thesis.docx                 # 只统计，不改文件
+python scripts/fix_latin_fonts.py thesis.docx --out fixed.docx # 另存修好的副本
+python scripts/fix_latin_fonts.py thesis.docx --in-place       # 原地修改（先备份）
+```
+
+脚本只改 ascii/hAnsi/cs，不动 `w:eastAsia`（中文字体）、字号与粗斜体；正文、表格、页眉页脚一起处理。
+
 ### 4. 先查哪些项
 
-脚本覆盖：A4 与页边距、页眉/页码域、标题层次与字号、正文字体字号与行距、摘要与关键词个数、
+脚本覆盖：A4 与页边距、页眉/页码域、标题层次与字号、正文字体字号与行距、西文是否误用中文字体、
+摘要与关键词个数、
 参考文献数量与外文比例、图表题注编号、表格左右边线、REF 交叉引用域与孤图/孤表、原创性声明与目录是否存在。
 标题用 Word 自动多级编号（正文看不到“第1章”字样）时也能识别，不会误报缺章标题。
 题注编号的连续性读的是域的**缓存结果**，长期没按 F9 的文档请先更新域并保存再自检。

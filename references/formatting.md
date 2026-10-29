@@ -66,6 +66,33 @@
 > 字号换算：初号 42、小初 36、一号 26、小一 24、二号 22、小二 18、三号 16、小三 15、四号 14、
 > 小四 12、五号 10.5、小五 9、六号 7.5（单位 pt）。
 
+### 2.1 中文与西文的分工（最容易漏的一条）
+
+上表的“宋体/黑体”只约束**汉字**。同一段文字里的西文和数字要用 Times New Roman：
+
+| 位置 | 汉字 | 西文/数字 |
+|---|---|---|
+| 正文、表格 | 宋体 | Times New Roman |
+| 章 / 节 / 条标题 | 黑体 | Times New Roman |
+| 图题、表题 | 黑体 | Times New Roman |
+| 目录、插图索引、附表索引条目 | 一级黑体、其余宋体 | Times New Roman |
+| 英文摘要、Key Words、英文内封 | — | Times New Roman |
+| 页眉、页码 | 宋体 | Times New Roman |
+
+- **依据**：规范正文只写“小 4 号宋体”，没有单独规定西文用什么；但校模板与 2025 年答辩通过的
+  湖南大学博士学位论文，`Normal` 样式是 `eastAsia=宋体 + ascii=Times New Roman`，
+  `Heading 1–4` 是 `eastAsia=黑体 + ascii=Times New Roman`，`Caption`（题注）是
+  `eastAsia=黑体 + ascii=Times New Roman`。按此执行才与模板逐像素一致。
+- **算“西文”的**：英文字母、阿拉伯数字、单位、化学式、缩写——`1100 ℃`、`850 h`、
+  `mg/cm²`、`Ni`、`Cr₂O₃`、`IN718`、`wt.%`。
+- **不要一起改的**：`℃`、`°`、`±`、`×`、希腊字母（`γ′`、`δ`、`α-Cr`）保持中文字体排正体；
+  公式里的数学斜体仍是 Cambria Math。
+- **Word 里怎么改**：只改“西文字体”（`w:rFonts/@w:ascii` 与 `@w:hAnsi`），
+  **不要**动“中文字体”（`@w:eastAsia`），否则中文会掉字体或出现方块。
+  改样式优先于逐段改 run；改完正文外观几乎不变，但字宽与换行会略微变化，需要重新看分页。
+- **机器检查/修复**：`python scripts/thesis_lint.py thesis.docx` 报 `FONT-07`；
+  `python scripts/fix_latin_fonts.py thesis.docx --in-place` 一次改完（含页眉页脚）。
+
 ## 3. 标题层次
 
 规范建议的层次代号（表 1）：

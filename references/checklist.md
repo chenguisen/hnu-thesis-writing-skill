@@ -45,6 +45,8 @@ python scripts/thesis_lint.py thesis.docx --degree master
 - [ ] 结论没有大段复制摘要。
 - [ ] 全文术语统一；缩写首次出现注明英文全称。
 - [ ] 物理量符号斜体、单位正体；单位符合法定计量单位。
+- [ ] 西文与数字是 Times New Roman（`1100 ℃`、`850 h`、`Ni`、`IN718`），中文仍是宋体/黑体——
+      样式和页眉页脚都要看，`thesis_lint.py` 报 `FONT-07` 时用 `scripts/fix_latin_fonts.py` 修。
 - [ ] 数字用法统一：年份四位；四位以上数字每三位空半格，不用千分位逗号。
 - [ ] 全文没有“待补充”“TODO”“XXX”“？？？”等占位符。
 - [ ] 全文没有残留的批注、修订痕迹、高亮。

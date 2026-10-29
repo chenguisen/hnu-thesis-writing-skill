@@ -31,6 +31,21 @@
 - 该文件本身有 3 处残留问题（旧论文页眉、`xx 教授` 占位、页眉继承），记录在
   `front-matter.md` 第 9 节，作为“答辩通过也未必零瑕疵”的提醒。
 
+### 2.1.1 从这份论文实测到的一条字体规则
+
+规范正文只写“正文小 4 号宋体”，没有单独规定西文用什么。但该论文的样式定义是：
+
+| 样式 | 中文字体（`w:eastAsia`） | 西文字体（`w:ascii`） |
+|---|---|---|
+| `Normal` | 宋体 | Times New Roman |
+| `Heading 1–4` | 黑体 | Times New Roman |
+| `Caption`（题注） | 黑体 | Times New Roman |
+
+也就是说“中文用中文字体、西文与数字用 Times New Roman”。附件里若把 `w:ascii` 设成宋体，
+英文与数字会用中文字体排（字宽、字距、换行都与模板不同）；这是从中文 Word 复制内容、
+或从别人论文里贴段落时最常见的问题。已据此补上 `formatting.md` 第 2.1 节、
+自检规则 `FONT-07` 和修正脚本 `scripts/fix_latin_fonts.py`。
+
 ## 2.2 脚本能做什么、不能做什么
 
 - `scripts/extract_front_matter.py`：定位源文档正文第 1 章（Heading 1 + 自动编号），把前面

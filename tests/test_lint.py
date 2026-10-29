@@ -126,6 +126,17 @@ class UnitTest(unittest.TestCase):
         section._sectPr.append(el)
         self.assertEqual(tl.get_section_start_type(section), "decimal")
 
+    def test_latin_in_cjk_font_counts_as_usage(self):
+        document = docx.Document()
+        run = document.add_paragraph().add_run("IN718 合金 850 h")
+        run.font.name = "宋体"
+        run._element.get_or_add_rPr().get_or_add_rFonts().set(
+            tl.qn("w:eastAsia"), "宋体"
+        )
+        runs, samples, _styles = tl.latin_in_cjk_font_usage(document)
+        self.assertEqual(runs, 1)
+        self.assertTrue(samples and "IN718" in samples[0])
+
     def test_orphan_figure_is_reported(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "orphan.docx"
@@ -196,6 +207,22 @@ class LintTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("CAP-03", result.stdout)
             self.assertIn("CAP-04", result.stdout)
+
+    def test_latin_in_cjk_font_is_warned(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "latin.docx"
+            document = docx.Document(str(FIXTURE))
+            for i in range(6):
+                run = document.add_paragraph().add_run(f"IN718 850 h 试样 {i}")
+                run.font.name = "宋体"
+                run._element.get_or_add_rPr().get_or_add_rFonts().set(
+                    tl.qn("w:eastAsia"), "宋体"
+                )
+            document.save(str(path))
+            result = run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("FONT-07", result.stdout)
+            self.assertIn("Times New Roman", result.stdout)
 
     def test_json_report_is_written(self):
         with tempfile.TemporaryDirectory() as td:
