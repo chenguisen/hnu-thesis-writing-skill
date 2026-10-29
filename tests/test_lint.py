@@ -18,7 +18,8 @@ import unittest
 from pathlib import Path
 
 import docx
-from docx.oxml import OxmlElement
+from docx.oxml import OxmlElement, parse_xml
+from docx.shared import Pt
 
 ROOT = Path(__file__).resolve().parent.parent
 LINT = ROOT / "scripts" / "thesis_lint.py"
@@ -255,6 +256,59 @@ class LintTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("FONT-09", result.stdout)
             self.assertIn("fix_symbol_fonts.py", result.stdout)
+
+    def _caption_doc(self, path: Path) -> docx.Document:
+        """在样例文档末尾加一条 Caption 样式的表题（样式设成五号）。"""
+        document = docx.Document(str(FIXTURE))
+        style = document.styles["Caption"]
+        style.font.size = Pt(10.5)
+        document.add_paragraph("表9.9  测试题注", style="Caption")
+        document.save(str(path))
+        return document
+
+    def test_caption_size_override_is_warned(self):
+        """题注样式是五号，但 run 上写死了 12 pt：渲染会变成小四。"""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "capsize.docx"
+            document = self._caption_doc(path)
+            cap = document.paragraphs[-1]
+            for r in cap.runs:
+                r.font.size = Pt(12)
+            document.save(str(path))
+            result = run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("FONT-10", result.stdout)
+
+    def test_caption_keep_flags_are_warned(self):
+        """题注没设“段中不分页”，会被拆到两页。"""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "capkeep.docx"
+            document = self._caption_doc(path)
+            cap = document.paragraphs[-1]
+            ppr = cap._element.get_or_add_pPr()
+            for tag in ("keepLines", "keepNext"):
+                for el in ppr.findall(tl.qn("w:" + tag)):
+                    ppr.remove(el)
+            document.save(str(path))
+            result = run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("CAP-06", result.stdout)
+
+    def test_caption_inline_math_is_warned(self):
+        """题注里夹行内公式对象：会排到题注文字前，并被索引域复制。"""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "capmath.docx"
+            document = self._caption_doc(path)
+            cap = document.paragraphs[-1]
+            omml = (
+                '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                '<m:r><m:t>(10-10)</m:t></m:r></m:oMath>'
+            )
+            cap._element.insert(1, parse_xml(omml))
+            document.save(str(path))
+            result = run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("CAP-05", result.stdout)
 
     def test_json_report_is_written(self):
         with tempfile.TemporaryDirectory() as td:

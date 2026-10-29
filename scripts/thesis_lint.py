@@ -111,6 +111,9 @@ RE_TAB_LOOSE = re.compile(r"^\s*表\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_PLACEHOLDER = re.compile(r"^\s*表\s*[xX×]\s*(?:[.．]\s*|\s+)(\S.*)$")
 RE_CITATION = re.compile(r"[\[［]\s*\d+(?:\s*[-–—~～,，、]\s*\d+)*\s*[\]］]")
 RE_CJK = re.compile(r"[\u4e00-\u9fff]")
+# OMML 行内公式：题注里出现时会排在文字前，并被目录/索引域一起复制
+M_OMML = "{http://schemas.openxmlformats.org/officeDocument/2006/math}oMath"
+M_OMML_PARA = "{http://schemas.openxmlformats.org/officeDocument/2006/math}oMathPara"
 RE_ASCII_ALPHA = re.compile(r"[A-Za-z]")
 
 TOC_TITLES = {"目 录", "目录", "目　　录"}
@@ -1373,6 +1376,91 @@ class Linter:
             f"{LATIN_FONT}、并把“东亚字体提示”去掉（见 references/formatting.md 第 2.1 节）",
         )
 
+    # -- 题注版式：不跨页、字号随样式、别夹公式 ---------------------------
+    def check_caption_layout(self) -> None:
+        caps = []
+        for p, t in zip(self.paras, self.texts):
+            low = (p.style.name or "").lower()
+            if low not in ("caption", "题注"):
+                continue
+            if not (RE_FIG_CAP.match(t) or RE_TAB_CAP.match(t)):
+                continue
+            caps.append((p, t))
+        if not caps:
+            return
+
+        def flag(p, tag):
+            """段落属性里的开关是否打开（缺省视为关）。"""
+            ppr = p._element.pPr
+            if ppr is None:
+                return False
+            el = ppr.find(qn("w:" + tag))
+            if el is None:
+                return False
+            return (el.get(qn("w:val")) or "true").lower() not in ("0", "false", "off")
+
+        # ① 题注里夹了行内公式对象（会跟着复制进插图和附表索引）
+        math_caps = [t for p, t in caps
+                     if p._element.findall(M_OMML) or p._element.findall(M_OMML_PARA)]
+        self.report.metrics["caption_math"] = len(math_caps)
+        if math_caps:
+            self.report.warn(
+                "CAP-05",
+                f"{len(math_caps)} 条题注里夹着行内公式对象（如“{math_caps[0][:18]}”）。"
+                "公式会排在题注文字前面，并被目录/索引域一起复制过去",
+                "把题注里的公式删掉（晶面指数等直接打“(10-10)”），"
+                "或用纯文本重打；删完更新一次目录与插图索引",
+            )
+
+        # ② 题注没有 keepLines / 图题没有 keepNext：会被拆到两页
+        split_risk = []
+        for p, t in caps:
+            need_lines = not flag(p, "keepLines")
+            need_next = RE_FIG_CAP.match(t) is not None and not flag(p, "keepNext")
+            if need_lines or need_next:
+                split_risk.append(t[:18])
+        if split_risk:
+            self.report.warn(
+                "CAP-06",
+                f"{len(split_risk)} 条题注没设“段中不分页/与下段同页”（如“{split_risk[0]}”），"
+                "换页时图题可能被拆到两页，违反“插图与其图题为一个整体”",
+                "题注段落勾选“段中不分页”，图题的“与下段同页”也勾上；"
+                "图所在段落勾“与下段同页”，让图与图题一起走（见 references/formatting.md 第 8 节）",
+            )
+
+        # ③ 题注字号被 run 直格式覆盖（样式是五号，run 写死 12 pt 很常见）
+        style_size = None
+        style_name = None
+        s = caps[0][0].style
+        while s is not None:
+            rpr = s.element.find(qn("w:rPr"))
+            sz = rpr.find(qn("w:sz")) if rpr is not None else None
+            if sz is not None:
+                style_size = int(sz.get(qn("w:val"))) / 2
+                style_name = s.name
+                break
+            s = s.base_style
+        overridden = []
+        for p, t in caps:
+            for r in p.runs:
+                if not (r.text or "").strip():
+                    continue
+                if r.font.size is not None and style_size is not None \
+                        and abs(r.font.size.pt - style_size) > 0.1:
+                    overridden.append((t[:18], r.font.size.pt))
+                    break
+        self.report.metrics["caption_size_override"] = len(overridden)
+        if overridden:
+            shown = overridden[0]
+            self.report.warn(
+                "FONT-10",
+                f"{len(overridden)} 条题注的字号被 run 直接改成 {shown[1]:g} pt，"
+                f"覆盖了“{style_name}”样式的 {style_size:g} pt（如“{shown[0]}”）。"
+                "题注应为五号（10.5 pt）",
+                "选中题注 → 开始 → 字号恢复为样式值（Ctrl+Space 清除直格式），"
+                "或 python -c 里的 python-docx 一行：删除题注 run 的 w:sz / w:szCs",
+            )
+
     # -- 正文里不该出现的黑体 ---------------------------------------------
     def check_body_heiti(self) -> None:
         """正文用宋体；正文里出现黑体，多半是交叉引用继承了题注的格式。"""
@@ -1427,6 +1515,7 @@ class Linter:
         self.check_latin_fonts()
         self.check_body_heiti()
         self.check_symbol_fonts()
+        self.check_caption_layout()
         self.check_references()
         self.check_figures_tables()
         self.check_cross_references()
