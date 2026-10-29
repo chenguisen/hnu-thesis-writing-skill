@@ -239,6 +239,23 @@ class LintTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("FONT-08", result.stdout)
 
+    def test_symbol_in_cjk_font_is_warned(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "symbol.docx"
+            document = docx.Document(str(FIXTURE))
+            for text in ("图4.4 氧化物/金属界面处δ相的TEM分析",
+                         "图4.5 无γ′/γ″层的TEM分析",
+                         "表4.2 γ″相和δ相中Nb位点的O₂吸附能"):
+                run = document.add_paragraph().add_run(text)
+                rfonts = run._element.get_or_add_rPr().get_or_add_rFonts()
+                rfonts.set(tl.qn("w:eastAsia"), "黑体")
+                rfonts.set(tl.qn("w:hint"), "eastAsia")
+            document.save(str(path))
+            result = run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("FONT-09", result.stdout)
+            self.assertIn("fix_symbol_fonts.py", result.stdout)
+
     def test_json_report_is_written(self):
         with tempfile.TemporaryDirectory() as td:
             report = Path(td) / "report.json"

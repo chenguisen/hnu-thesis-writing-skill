@@ -86,6 +86,14 @@ CJK_ASCII_FONTS = (
 )
 LATIN_FONT = "Times New Roman"
 RE_LATIN = re.compile(r"[A-Za-z0-9]")
+# 东亚宽度为“歧义”的符号：word 会按 w:hint 决定用哪套字体，全角/半角差别明显
+RE_SYMBOL = re.compile(
+    r"[\u00b0\u00b1\u00b5\u00b7\u00d7\u00f7"
+    r"\u0370-\u03ff\u1f00-\u1fff"
+    r"\u2032-\u2037\u2070-\u209f"
+    r"\u2103\u2109\u210e\u2113\u212b"
+    r"\u2190-\u21ff\u2200-\u22ff\u2300-\u23ff\u25a0-\u25ff]"
+)
 
 _NUM_SEP = r"(?:\s+|(?=[\u4e00-\u9fff]))"
 RE_CHAPTER = re.compile(r"^第\s*(\d+)\s*章[\s　]*(.*)$")
@@ -473,6 +481,47 @@ def latin_in_cjk_font_usage(doc) -> tuple[int, list[str], list[str]]:
         if rfonts is not None and rfonts.get(qn("w:ascii")) in CJK_ASCII_FONTS:
             styles.append(style.name)
     return runs, samples, styles
+
+
+def symbol_in_cjk_font_usage(doc) -> tuple[int, list[str], int]:
+    """希腊字母/单位符号被中文字体排的 run 数、样例、涉及符号种类数。
+
+    `w:rFonts` 带 `w:hint="eastAsia"` 时，东亚宽度为“歧义”的字符（希腊字母、′″、℃、
+    °、±、×、÷、µ、下标 ₂ 等）会交给中文字体排，得到全角字形：又宽又大，与正文里
+    同一符号（Times New Roman）不一致；题注、插图索引、表格里最容易出现。
+    """
+    runs = 0
+    samples: list[str] = []
+    symbols: set[str] = set()
+
+    def check(element):
+        nonlocal runs
+        for r in element.iter(qn("w:r")):
+            text = "".join(t.text or "" for t in r.iter(qn("w:t")))
+            if not text or not RE_SYMBOL.search(text):
+                continue
+            rpr = r.find(qn("w:rPr"))
+            rfonts = rpr.find(qn("w:rFonts")) if rpr is not None else None
+            if rfonts is None:
+                continue
+            if (rfonts.get(qn("w:hint")) or "").lower() != "eastasia":
+                continue
+            runs += 1
+            symbols.update(RE_SYMBOL.findall(text))
+            if len(samples) < 8:
+                samples.append(text.strip()[:24])
+
+    check(doc.element.body)
+    for r in _iter_hdr_ftr_run_elements(doc):
+        text = "".join(t.text or "" for t in r.iter(qn("w:t")))
+        if not text or not RE_SYMBOL.search(text):
+            continue
+        rpr = r.find(qn("w:rPr"))
+        rfonts = rpr.find(qn("w:rFonts")) if rpr is not None else None
+        if rfonts is not None and (rfonts.get(qn("w:hint")) or "").lower() == "eastasia":
+            runs += 1
+            symbols.update(RE_SYMBOL.findall(text))
+    return runs, samples, len(symbols)
 
 
 def _border_is_visible(el) -> bool:
@@ -1305,6 +1354,25 @@ class Linter:
             f"或在 Word 里把样式/文字的“西文字体”设为 {LATIN_FONT}，中文字体保持宋体/黑体",
         )
 
+    # -- 符号被中文字体排 ---------------------------------------------
+    def check_symbol_fonts(self) -> None:
+        runs, samples, kinds = symbol_in_cjk_font_usage(self.doc)
+        self.report.metrics["symbol_cjk_runs"] = runs
+        if runs < 3:
+            return
+        parts = [f"检测到 {runs} 处希腊字母/单位符号用了中文字体（{kinds} 种符号）"]
+        if samples:
+            parts.append("如“" + "”“".join(samples[:3]) + "”")
+        self.report.warn(
+            "FONT-09",
+            "；".join(parts) + "。同一符号在正文里是 "
+            f"{LATIN_FONT}、在题注/索引/表格里却是宋体或黑体的全角字形，"
+            "宽度和粗细都对不上（通常是因为 run 带 w:hint=\"eastAsia\"）",
+            "python scripts/fix_symbol_fonts.py thesis.docx --in-place；"
+            "或在 Word 里选中该符号，把“西文字体”设为 "
+            f"{LATIN_FONT}、并把“东亚字体提示”去掉（见 references/formatting.md 第 2.1 节）",
+        )
+
     # -- 正文里不该出现的黑体 ---------------------------------------------
     def check_body_heiti(self) -> None:
         """正文用宋体；正文里出现黑体，多半是交叉引用继承了题注的格式。"""
@@ -1358,6 +1426,7 @@ class Linter:
         self.check_body()
         self.check_latin_fonts()
         self.check_body_heiti()
+        self.check_symbol_fonts()
         self.check_references()
         self.check_figures_tables()
         self.check_cross_references()
@@ -1397,6 +1466,7 @@ def print_report(report: Report, chapter_mode: bool = False) -> None:
             "ref_fields": "REF 交叉引用域",
             "latin_cjk_runs": "西文误用中文字体（run）",
             "body_heiti_runs": "正文误用黑体（run）",
+            "symbol_cjk_runs": "希腊字母/符号误用中文字体（run）",
         }
         for key, label in labels.items():
             if key in report.metrics:

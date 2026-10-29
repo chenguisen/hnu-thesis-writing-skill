@@ -46,6 +46,27 @@
 或从别人论文里贴段落时最常见的问题。已据此补上 `formatting.md` 第 2.1 节、
 自检规则 `FONT-07` 和修正脚本 `scripts/fix_latin_fonts.py`。
 
+**同一条规则延伸到符号（2026-10 用真实学位论文的 PDF 字形实测）**：`Times New Roman`
+这套模板默认同样管希腊字母与 `℃ ° ± × ′ ″`、上下标——`Normal`/`Caption` 样式里
+`w:hint` 缺省时，Word/WPS 就是拿 `w:ascii`（Times New Roman）去排这些字符；
+只有当 run 显式写了 `w:hint="eastAsia"` 时，它们才被换成宋体/黑体的**全角**字形。
+实测证据（同一篇 130 页博士论文，修正前后导出 PDF 后逐 span 读字体名）：
+
+| 对象 | 修正前 | 修正后 |
+|---|---|---|
+| 正文 `δ`（run 无 hint） | TimesNewRomanPSMT | TimesNewRomanPSMT（不变） |
+| 题注 `δ相`（run 带 hint） | **SimHei** | TimesNewRomanPSMT |
+| 插图索引 `γ″复合析出`（带 hint） | **SimSun** | TimesNewRomanPSMT |
+| 表格单元格 `δ`（带 hint） | **SimSun** | TimesNewRomanPSMT |
+| 题注/索引里的汉字 | SimHei / SimSun | 不变 |
+
+全角字形不仅更粗更大，`γ″` 之间还会撑出接近一个汉字宽的空当，且与正文的同一符号对不上。
+已据此补上 `formatting.md` 第 2.1.1 节、`cross-references.md` 第 2.2 节、
+自检规则 `FONT-09`、修正脚本 `scripts/fix_symbol_fonts.py` 与 10 条回归测试。
+对照实验（4 个段落：黑体/宋体 × 有/无 hint，转 PDF 读字体名）证明：去掉 `hint` 后
+汉字仍走 `w:eastAsia`、ASCII 仍走 `w:ascii`，只有歧义符号改成 Times New Roman。
+
+
 ## 2.2 脚本能做什么、不能做什么
 
 - `scripts/extract_front_matter.py`：定位源文档正文第 1 章（Heading 1 + 自动编号），把前面

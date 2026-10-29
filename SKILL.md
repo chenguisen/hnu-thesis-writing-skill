@@ -49,7 +49,10 @@ description: >
    `python scripts/thesis_lint.py thesis.docx --degree master`，逐条处理 ERROR/WARN。
    只写了一章时加 `--chapter`，跳过封面/声明/摘要/目录/参考文献与总字数检查。
    报 `FONT-07`（西文用了中文字体）时用
-   `python scripts/fix_latin_fonts.py thesis.docx --in-place` 批量改成 Times New Roman。
+   `python scripts/fix_latin_fonts.py thesis.docx --in-place` 批量改成 Times New Roman；
+   报 `FONT-09`（希腊字母/单位符号用了中文字体）时用
+   `python scripts/fix_symbol_fonts.py thesis.docx --in-place`，**改完再更新域/目录一次**，
+   确保插图索引、附表索引里同一符号的字形也跟着变。
 6. **人工复核**：按 `references/checklist.md` 检查签名、印刷、装订、电子版等机器查不了的项目。
 7. **提交**：纸质版 + 与印刷版格式一致的电子版；保留一份 PDF 用于比对分页。
 
@@ -69,6 +72,7 @@ description: >
 | 页边距              | 上/下 22 mm，左/右 25 mm；页眉/页脚距边界 11 mm                         |
 | 正文               | 小 4 号宋体（12 pt），每页 35 行、每行 35 字                             |
 | 西文与数字            | Times New Roman（正文、各级标题、图表题、目录/索引条目一致；中文仍是宋体/黑体）          |
+| 符号               | 希腊字母、`℃ ° ± × µ ′ ″`、上下标也用 Times New Roman；不要用宋体/黑体的全角字形     |
 | 章标题              | 小 2 号黑体（18 pt），居中，上下各空一行                                   |
 | 节标题（1.1）         | 小 3 号黑体（15 pt），顶格，上下各空 12 磅                                |
 | 条标题（1.1.1）       | 4 号黑体（14 pt），上下各空 6 磅                                      |
@@ -82,7 +86,8 @@ description: >
 ## 十条不可协商的硬规则
 
 1. **页面**：A4；上/下 22 mm、左/右 25 mm；页眉/页脚 11 mm（版心宽度见下方“已知矛盾”）。
-   **字体分工**：中文用宋体/黑体，西文与数字用 Times New Roman（含单位、化学式、缩写，如 `1100 ℃`、`Ni`、`IN718`）。
+   **字体分工**：中文用宋体/黑体，西文与数字用 Times New Roman（含单位、化学式、缩写，如 `1100 ℃`、`Ni`、`IN718`）；
+   希腊字母与 `℃ ° ± × ′ ″` 同理，同一符号在正文、题注、目录/索引、表格里必须同一种字形。
 2. **标题层级**：章 `第1章` 居中；节 `1.1`、条 `1.1.1`、款 `1.1.1.1` 顶格；编号用阿拉伯数字，全文统一。
 3. **每章另起一页**，章标题 ≤15 字、不得使用标点，尽量不用英文缩写。
 4. **页眉**：奇数页学位论文类别，偶数页论文题目；页眉线为粗线在上、细线在下的双线。
@@ -104,7 +109,7 @@ description: >
   GB/T 7713.1-2006、GB/T 7714-2015 等。学校模板未更新时按学校模板；学校明确要求新国标时按新国标，  
   并在文后统一著录格式。详见 `references/citations.md`。
 
-## 常见错误清单（先查这 16 条）
+## 常见错误清单（先查这 17 条）
 
 1. 用空格或空行“凑”版面，而不是设置段前/段后间距和固定行距。
 2. 章标题用 16 pt 或加粗宋体，而不是小 2 号黑体。
@@ -122,6 +127,7 @@ description: >
 14. 结论加了“第 X 章”，或结论与摘要大段重复。
 15. 英文与数字用宋体/黑体排（`rFonts/@w:ascii` 写成了宋体），而不是 Times New Roman；因此字宽、换行都与模板不符。
 16. 正文里的“图1.1”“表2.1”变成黑体：交叉引用域更新时继承了题注的格式。域代码里加 `\* MERGEFORMAT` 可避免（见 `cross-references.md` 第 2.1 节）。
+17. 题注/索引/表格里的希腊字母（`δ相`、`γ′/γ″层`）、`℃`、`′ ″` 变成宋体/黑体的全角字形：run 带了 `w:hint="eastAsia"`，与正文里同一个符号的 Times New Roman 字形对不上（`γ″` 之间还会撑出空当）。见 `formatting.md` 第 2.1.1 节，用 `fix_symbol_fonts.py` 修。
 
 ## 资源
 
@@ -137,6 +143,7 @@ description: >
 | `references/source-and-version.md` | 来源、提取方法、原文错误与版本说明          |
 | `scripts/extract_front_matter.py`  | 从已通过论文/模板原样抽取前置部分，只换文字      |
 | `scripts/fix_latin_fonts.py`       | 把西文/数字统一为 Times New Roman，不改中文字体 |
+| `scripts/fix_symbol_fonts.py`      | 把希腊字母/单位符号改回 Times New Roman（切段去 `w:hint`） |
 | `scripts/thesis_lint.py`           | 对 `.docx` 做结构与格式自检         |
 
 ## 输出约定

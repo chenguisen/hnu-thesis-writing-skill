@@ -85,13 +85,59 @@
   `eastAsia=黑体 + ascii=Times New Roman`。按此执行才与模板逐像素一致。
 - **算“西文”的**：英文字母、阿拉伯数字、单位、化学式、缩写——`1100 ℃`、`850 h`、
   `mg/cm²`、`Ni`、`Cr₂O₃`、`IN718`、`wt.%`。
-- **不要一起改的**：`℃`、`°`、`±`、`×`、希腊字母（`γ′`、`δ`、`α-Cr`）保持中文字体排正体；
-  公式里的数学斜体仍是 Cambria Math。
+- **符号也用 Times New Roman**：希腊字母（`γ′`、`γ″`、`δ`、`α-Cr`、`β`）、`℃`、`°`、`±`、
+  `×`、`÷`、`µ`、`′`、`″`、上/下标（`Cr₂O₃`、`10⁻⁵`）和汉字一样属于“非西文字母的中文语境
+  字符”，字宽与粗细必须跟西文一致，因此统一用 Times New Roman 正体；公式里的数学斜体
+  仍是 Cambria Math。**不要**把它们排成宋体/黑体的全角字形。
+- **不要一起改的**：全角标点（`，。、；：（）`）、引号、破折号、省略号仍按中文字体排；
+  它们本来就不属于西文。
 - **Word 里怎么改**：只改“西文字体”（`w:rFonts/@w:ascii` 与 `@w:hAnsi`），
   **不要**动“中文字体”（`@w:eastAsia`），否则中文会掉字体或出现方块。
   改样式优先于逐段改 run；改完正文外观几乎不变，但字宽与换行会略微变化，需要重新看分页。
 - **机器检查/修复**：`python scripts/thesis_lint.py thesis.docx` 报 `FONT-07`；
   `python scripts/fix_latin_fonts.py thesis.docx --in-place` 一次改完（含页眉页脚）。
+
+#### 2.1.1 `w:hint="eastAsia"`：符号变成全角字形的元凶
+
+`w:rPr/w:rFonts` 里的 `w:hint="eastAsia"` 表示“**歧义字符**用东亚字体”。Unicode 里
+`East_Asian_Width=A`（Ambiguous）的字符——希腊字母、`′″`、`℃ ° ± × ÷ µ ·`、上标下标
+`⁰¹₂₃`、箭头、`≈ ≤ ≥ ∑`——都会因此交给 `w:eastAsia`（宋体/黑体）去排，结果是：
+
+| 位置 | 同一个 `δ` | 后果 |
+| --- | --- | --- |
+| 正文（run 无 hint） | Times New Roman，窄体 | 与西文一致 |
+| 题注（run 带 hint） | 黑体全角字形 | 又大又粗，两侧各多半个字空当 |
+| 插图索引/附表索引（带 hint） | 宋体全角字形 | 同上，且与题注又不一样 |
+| 表格单元格（带 hint） | 宋体全角字形 | 表头与表体符号粗细不一 |
+
+判据：**同一种符号在同一篇论文里只应有一种字形**。正文是 Times New Roman，题注、索引、
+表格就必须也是 Times New Roman。`γ″` 尤其明显——全角字形会在 `γ` 与 `″` 之间撑出一个
+近乎一个汉字宽的空隙。
+
+修法不是删掉全部 `hint`（那会让 `“”`、`—`、`…` 一起变成西文字体，换行也变），而是把这类
+run **按“符号 / 非符号”切段**：符号段去掉 `w:hint`（于是落到 `ascii/hAnsi`=Times New Roman），
+汉字段保留 `w:hint="eastAsia"`（全角引号、破折号照旧）。切段只在 run 级动 `w:t`，文字一字不改。
+
+```bash
+python scripts/thesis_lint.py thesis.docx          # FONT-09 会报“多少处符号用了中文字体”
+python scripts/fix_symbol_fonts.py thesis.docx --out 修好的.docx
+```
+
+改完必须重新导出 PDF 并在 PDF 里核对字形（Word 的“显示”看不出字体差异）：
+
+```python
+import fitz  # PyMuPDF
+page = fitz.open("thesis.pdf")[60]
+for b in page.get_text("dict")["blocks"]:
+    for ln in b["lines"]:
+        for s in ln["spans"]:
+            if "δ" in s["text"] or "℃" in s["text"]:
+                print(repr(s["text"]), s["font"])   # 应为 TimesNewRomanPSMT
+```
+
+> 注意：`w:hint` 只影响歧义字符，不影响汉字与 ASCII 字母数字——所以汉字仍按 `eastAsia` 排，
+> `TEM`、`4.4` 仍按 `ascii` 排。
+
 
 ## 3. 标题层次
 
