@@ -43,7 +43,8 @@ description: >
 3. **写内容**：先内容后格式。每章另起一页；章标题 ≤15 字、无标点；结论单独一章、不加章号。
 4. **排版**：按 `references/formatting.md` 设置样式。优先改“样式”，不要逐段手工加粗/改字号；
    图/表用题注、公式用书签，正文用交叉引用域，确保编号自动更新且可点击跳转（见
-   `references/cross-references.md`）。
+   `references/cross-references.md`）。参考文献不要手打编号——用 Zotero/EndNote 的引用域管理，
+   编号与著录格式才会自动更新（见 `references/reference-manager.md`）。
 5. **自检**：先安装依赖（`python -m pip install python-docx`），再运行
    `python scripts/thesis_lint.py thesis.docx --degree master`，逐条处理 ERROR/WARN。
    只写了一章时加 `--chapter`，跳过封面/声明/摘要/目录/参考文献与总字数检查。
@@ -130,6 +131,7 @@ description: >
 | `references/front-matter.md`       | 封面/内封/声明/摘要/目录/索引的逐行版式与分节页码 |
 | `references/formatting.md`         | 页面、样式、页眉页脚、标题层次、图表公式、印刷装订  |
 | `references/citations.md`          | 正文引用位置、文后著录格式、GB7714 新旧版差异 |
+| `references/reference-manager.md`  | 用 Zotero/EndNote 管文献：编号与著录格式自动更新、迁移与常见坑 |
 | `references/checklist.md`          | 提交前逐项检查清单（含机器查不了的项目）       |
 | `references/cross-references.md`   | 图/表/公式的题注、书签、REF 域与点击跳转    |
 | `references/source-and-version.md` | 来源、提取方法、原文错误与版本说明          |

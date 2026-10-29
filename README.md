@@ -27,6 +27,7 @@
 | [`references/front-matter.md`](references/front-matter.md) | 封面/内封/声明/摘要/目录/索引的逐行版式、分节与页码 |
 | [`references/formatting.md`](references/formatting.md) | 页面、字体字号、页眉页脚、标题层次、图表公式、印刷装订 |
 | [`references/citations.md`](references/citations.md) | 正文引用位置、文后著录格式、GB7714 新旧版差异 |
+| [`references/reference-manager.md`](references/reference-manager.md) | 用 Zotero/EndNote 管文献：编号自动更新、迁移步骤、WPS 兼容性 |
 | [`references/checklist.md`](references/checklist.md) | 提交前逐项检查清单（含机器查不了的项目） |
 | [`references/cross-references.md`](references/cross-references.md) | 图/表/公式的题注、书签、REF 域与点击跳转 |
 | [`references/source-and-version.md`](references/source-and-version.md) | 来源、提取方法、原文错误与版本说明 |
