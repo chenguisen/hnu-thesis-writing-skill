@@ -110,6 +110,10 @@ RE_FIG_LOOSE = re.compile(r"^\s*图\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_LOOSE = re.compile(r"^\s*表\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_PLACEHOLDER = re.compile(r"^\s*表\s*[xX×]\s*(?:[.．]\s*|\s+)(\S.*)$")
 RE_CITATION = re.compile(r"[\[［]\s*\d+(?:\s*[-–—~～,，、]\s*\d+)*\s*[\]］]")
+# 正文引用：“图4.10、11、14”“表3.1~3.3”“图4.10(a)”
+RE_CITE_GROUP = re.compile(
+    r"([图表])\s*(\d+)\s*[.．]\s*(\d+)((?:\s*[、,，和与及~～\-–]\s*\d+(?:[.．]\d+)?)*)"
+)
 RE_CJK = re.compile(r"[\u4e00-\u9fff]")
 # OMML 行内公式：题注里出现时会排在文字前，并被目录/索引域一起复制
 M_OMML = "{http://schemas.openxmlformats.org/officeDocument/2006/math}oMath"
@@ -1301,21 +1305,13 @@ class Linter:
             )
 
         orphans: list[str] = []
+        cited = self._cited_numbers({c[3] for c in captions})
         for kind, ch, num, idx, loose in captions:
             if loose:
-                pattern = re.compile(rf"{kind}\s*{num}(?!\d)")
                 label = f"{kind}{num}"
             else:
-                pattern = re.compile(rf"{kind}\s*{ch}\s*[.．]\s*{num}(?!\d)")
                 label = f"{kind}{ch}.{num}"
-            found = False
-            for j, t in enumerate(self.texts):
-                if j == idx or is_toc_line(t, self.paras[j].style.name):
-                    continue
-                if pattern.search(t):
-                    found = True
-                    break
-            if not found:
+            if (kind, ch, num) not in cited:
                 orphans.append(label)
         if orphans:
             self.report.warn(
@@ -1323,6 +1319,32 @@ class Linter:
                 "以下图/表未在正文中找到引用：" + "、".join(orphans),
                 "每张图/每个表都应在正文中至少引用一次；编号建议用交叉引用域",
             )
+
+    def _cited_numbers(self, exclude: set[int] | None = None) -> set[tuple[str, int, int]]:
+        """正文里引用过的图/表编号集合，支持“图4.10、11、14”“表3.1~3.3”这类略写。
+
+        题注自身不算“被正文引用”，因此通过 exclude 跳过题注段落。
+        """
+        exclude = exclude or set()
+        cited: set[tuple[str, int, int]] = set()
+        for j, t in enumerate(self.texts):
+            if j in exclude:
+                continue
+            if is_toc_line(t, self.paras[j].style.name):
+                continue
+            for m in RE_CITE_GROUP.finditer(t):
+                kind, ch, num, tail = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4) or ""
+                cited.add((kind, ch, num))
+                for part in re.split(r"[\s、,，和与及~～\-–]+", tail):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    if re.fullmatch(r"\d+[.．]\d+", part):          # 4.14
+                        c2, n2 = re.split(r"[.．]", part)
+                        cited.add((kind, int(c2), int(n2)))
+                    elif part.isdigit():                            # 11
+                        cited.add((kind, ch, int(part)))
+        return cited
 
     # -- 前置部分 ---------------------------------------------------------
     def check_front_matter(self) -> None:

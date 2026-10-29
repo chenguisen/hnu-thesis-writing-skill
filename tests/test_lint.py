@@ -310,6 +310,23 @@ class LintTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("CAP-05", result.stdout)
 
+    def test_cited_numbers_support_shorthand(self):
+        """“图4.10、11、14”这种略写要能展开成三个编号。"""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "cite.docx"
+            document = docx.Document(str(FIXTURE))
+            document.add_paragraph("这一解释与实验观察（图4.10、11、14）高度吻合。")
+            document.add_paragraph("见表3.1~3.3。")
+            document.add_paragraph("如图4.16所示。")
+            document.save(str(path))
+            lint = tl.Linter(path, "master", chapter_mode=True)
+            cited = lint._cited_numbers()
+            self.assertIn(("图", 4, 10), cited)
+            self.assertIn(("图", 4, 11), cited)
+            self.assertIn(("图", 4, 14), cited)
+            self.assertIn(("图", 4, 16), cited)
+            self.assertIn(("表", 3, 1), cited)
+
     def test_json_report_is_written(self):
         with tempfile.TemporaryDirectory() as td:
             report = Path(td) / "report.json"
