@@ -1305,6 +1305,49 @@ class Linter:
             f"或在 Word 里把样式/文字的“西文字体”设为 {LATIN_FONT}，中文字体保持宋体/黑体",
         )
 
+    # -- 正文里不该出现的黑体 ---------------------------------------------
+    def check_body_heiti(self) -> None:
+        """正文用宋体；正文里出现黑体，多半是交叉引用继承了题注的格式。"""
+        start = None
+        for i, t in enumerate(self.texts):
+            if self._classify(self.paras[i], t) == "chapter":
+                start = i
+                break
+        if start is None:
+            return
+        bad = 0
+        samples: list[str] = []
+        for p, t in zip(self.paras[start:], self.texts[start:]):
+            if self._classify(p, t) is not None:
+                continue
+            style_name = p.style.name if p.style is not None else ""
+            low = style_name.lower()
+            if low.startswith("toc") or low.startswith("caption") or "题注" in style_name:
+                continue
+            for run in p.runs:
+                text = (run.text or "").strip()
+                if not text:
+                    continue
+                rpr = run._element.find(qn("w:rPr"))
+                rfonts = rpr.find(qn("w:rFonts")) if rpr is not None else None
+                east = rfonts.get(qn("w:eastAsia")) if rfonts is not None else None
+                if east is None:
+                    east = style_font(p.style, "eastAsia")
+                if east in HEITI:
+                    bad += 1
+                    if len(samples) < 5:
+                        samples.append(text[:16])
+        self.report.metrics["body_heiti_runs"] = bad
+        if bad < 3:
+            return
+        self.report.warn(
+            "FONT-08",
+            f"正文里有 {bad} 处文字是黑体（如“" + "”“".join(samples[:3]) + "”）。"
+            "正文应为宋体；交叉引用（REF 域）更新时会继承题注的黑体，是最常见的原因",
+            "把正文里的黑体改回宋体；交叉引用可在域代码后加 \\* MERGEFORMAT，"
+            "让更新时保留域自身格式（见 references/cross-references.md）",
+        )
+
     # -- 汇总 -------------------------------------------------------------
     def run(self) -> Report:
         self.check_pages()
@@ -1314,6 +1357,7 @@ class Linter:
         self.check_abstract()
         self.check_body()
         self.check_latin_fonts()
+        self.check_body_heiti()
         self.check_references()
         self.check_figures_tables()
         self.check_cross_references()
@@ -1352,6 +1396,7 @@ def print_report(report: Report, chapter_mode: bool = False) -> None:
             "in_text_citations": "正文引用标注数",
             "ref_fields": "REF 交叉引用域",
             "latin_cjk_runs": "西文误用中文字体（run）",
+            "body_heiti_runs": "正文误用黑体（run）",
         }
         for key, label in labels.items():
             if key in report.metrics:

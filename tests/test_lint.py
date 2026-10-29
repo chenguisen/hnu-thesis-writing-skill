@@ -224,6 +224,21 @@ class LintTest(unittest.TestCase):
             self.assertIn("FONT-07", result.stdout)
             self.assertIn("Times New Roman", result.stdout)
 
+    def test_body_heiti_is_warned(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "heiti.docx"
+            document = docx.Document(str(FIXTURE))
+            for _ in range(3):
+                p = document.add_paragraph()
+                run = p.add_run("图1.1")
+                run._element.get_or_add_rPr().get_or_add_rFonts().set(
+                    tl.qn("w:eastAsia"), "黑体"
+                )
+            document.save(str(path))
+            result = run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("FONT-08", result.stdout)
+
     def test_json_report_is_written(self):
         with tempfile.TemporaryDirectory() as td:
             report = Path(td) / "report.json"
