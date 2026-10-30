@@ -109,6 +109,7 @@ RE_TAB_CAP = re.compile(r"^\s*表\s*(\d+)\s*[.．]\s*(\d+)(?:\s+|$)")
 RE_FIG_LOOSE = re.compile(r"^\s*图\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_LOOSE = re.compile(r"^\s*表\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_PLACEHOLDER = re.compile(r"^\s*表\s*[xX×]\s*(?:[.．]\s*|\s+)(\S.*)$")
+RE_PANEL_NOTE = re.compile(r"^\s*[（(]\s*[a-zA-Z]\s*[)）]")
 RE_CITATION = re.compile(r"[\[［]\s*\d+(?:\s*[-–—~～,，、]\s*\d+)*\s*[\]］]")
 # 正文引用：“图4.10、11、14”“表3.1~3.3”“图4.10(a)”
 RE_CITE_GROUP = re.compile(
@@ -1448,6 +1449,34 @@ class Linter:
                 "换页时图题可能被拆到两页，违反“插图与其图题为一个整体”",
                 "题注段落勾选“段中不分页”，图题的“与下段同页”也勾上；"
                 "图所在段落勾“与下段同页”，让图与图题一起走（见 references/formatting.md 第 8 节）",
+            )
+
+        # ②b 图注（题注下一段的分图说明）里夹行内公式：同样会把晶面指数排错、
+        #     让图注字号/字体出现 CambriaMath 异常
+        note_math = []
+        for i, (p, t) in enumerate(zip(self.paras, self.texts)):
+            if not (p._element.findall(M_OMML) or p._element.findall(M_OMML_PARA)):
+                continue
+            low = (p.style.name or "").lower()
+            if low in ("caption", "题注"):
+                continue
+            if not RE_PANEL_NOTE.match(t):
+                continue
+            near_cap = False
+            for j in range(max(0, i - 2), i):
+                if (self.paras[j].style.name or "").lower() in ("caption", "题注"):
+                    near_cap = True
+                    break
+            if near_cap and len(t) <= 500:
+                note_math.append(t.strip()[:18] or "(空段落)")
+        self.report.metrics["note_math"] = len(note_math)
+        if note_math:
+            self.report.warn(
+                "CAP-07",
+                f"{len(note_math)} 段图注/表注里夹着行内公式对象（如“{note_math[0]}”）。"
+                "晶面指数用公式对象会带来 CambriaMath 字体、上下标错位，索引域也可能复制过去",
+                "把图注里的公式改成纯文本（如 (10-10)、(11-20)），与正文“[10-10]晶带轴”的写法统一；"
+                "改完更新一次域（见 references/formatting.md 第 10 节）",
             )
 
         # ③ 题注字号被 run 直格式覆盖（样式是五号，run 写死 12 pt 很常见）

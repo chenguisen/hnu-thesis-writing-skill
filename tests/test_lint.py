@@ -310,6 +310,22 @@ class LintTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("CAP-05", result.stdout)
 
+    def test_figure_note_inline_math_is_warned(self):
+        """图注（题注下一段）里夹行内公式：晶面指数会变成 CambriaMath 对象。"""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "notemath.docx"
+            document = self._caption_doc(path)
+            note = document.add_paragraph("(a) (0001)面Cr终止；(b) 面O终止。")
+            omml = (
+                '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                '<m:r><m:t>(10-10)</m:t></m:r></m:oMath>'
+            )
+            note._element.insert(1, parse_xml(omml))
+            document.save(str(path))
+            result = run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("CAP-07", result.stdout)
+
     def test_cited_numbers_support_shorthand(self):
         """“图4.10、11、14”这种略写要能展开成三个编号。"""
         with tempfile.TemporaryDirectory() as td:
