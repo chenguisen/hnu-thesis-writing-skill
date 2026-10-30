@@ -148,10 +148,12 @@ description: >
 | `scripts/fix_latin_fonts.py`       | 把西文/数字统一为 Times New Roman，不改中文字体 |
 | `scripts/fix_symbol_fonts.py`      | 把希腊字母/单位符号改回 Times New Roman（切段去 `w:hint`） |
 | `scripts/thesis_lint.py`           | 对 `.docx` 做结构与格式自检         |
+| `scripts/renumber_refs.py`         | 按正文首次引用顺序重排参考文献编号（正文上标 + 文后条目同步） |
 
 ## 输出约定
 
 - 修改论文时，先报告“发现的问题 → 对应规范条款 → 将做的修改”，再动文件。
 - 不替用户编造数据、结论或参考文献；发现缺文献时只列缺口，不虚构条目。
 - 每次交付附一份 `thesis_lint.py` 的结果，并明确哪些 WARN 是有意保留的（例如学院模板要求不同）。
+- 参考文献若出现“标注跳号”或“文后按作者排、正文按主题引”，用 `python scripts/renumber_refs.py thesis.docx --report map.txt` 一次性重排（**先重排、后更新域**）；脚本会跳过文献表里不存在的编号并在报告中列出，不要手工逐个改。
 - 文档中的“约”“左右”是规范原文用词，不要擅自改成硬性上下限。
