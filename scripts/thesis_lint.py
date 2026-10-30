@@ -109,6 +109,10 @@ RE_TAB_CAP = re.compile(r"^\s*表\s*(\d+)\s*[.．]\s*(\d+)(?:\s+|$)")
 RE_FIG_LOOSE = re.compile(r"^\s*图\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_LOOSE = re.compile(r"^\s*表\s*(\d+)\s*[.．]?\s+(\S.*)$")
 RE_TAB_PLACEHOLDER = re.compile(r"^\s*表\s*[xX×]\s*(?:[.．]\s*|\s+)(\S.*)$")
+# 题注三级编号且前两段相同（章号重复）：图4.4.2、表3.3.1；后面须是空白或行尾（排除“图3.3.2(a)”这类正文引用）
+RE_CAP_DUP_CHAP = re.compile(
+    r"^\s*([图表])\s*(\d+)\s*[.．]\s*(\d+)\s*[.．]\s*(\d+)(?=\s|$)"
+)
 RE_PANEL_NOTE = re.compile(r"^\s*[（(]\s*[a-zA-Z]\s*[)）]")
 RE_CITATION = re.compile(r"[\[［]\s*\d+(?:\s*[-–—~～,，、]\s*\d+)*\s*[\]］]")
 # 正文引用：“图4.10、11、14”“表3.1~3.3”“图4.10(a)”
@@ -1176,9 +1180,13 @@ class Linter:
         loose_figs: list[int] = []
         loose_tabs: list[int] = []
         table_placeholders: list[str] = []
+        dup_caps: list[str] = []
         for p, t in zip(self.paras, self.texts):
             if is_toc_line(t, p.style.name):
                 continue
+            m = RE_CAP_DUP_CHAP.match(t)
+            if m and m.group(2) == m.group(3):
+                dup_caps.append(t[:28])
             m = RE_FIG_CAP.match(t)
             if m:
                 fig_nums.setdefault(int(m.group(1)), []).append(int(m.group(2)))
@@ -1232,6 +1240,12 @@ class Linter:
                 "定稿前填入真实表号（如表3.1），并检查正文“表x”引用",
             )
             n_tab += len(table_placeholders)
+        if dup_caps:
+            self.report.warn(
+                "CAP-08",
+                f"{len(dup_caps)} 个题注编号重复章号（如“{dup_caps[0]}…”），章号被写了两次",
+                "题注里只写“图/表”二字，章号交给 STYLEREF 1 域；删掉手打的“图4.”前缀",
+            )
         self.report.metrics["figures"] = n_fig
         self.report.metrics["tables"] = n_tab
 

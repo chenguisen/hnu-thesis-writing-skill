@@ -209,6 +209,18 @@ class LintTest(unittest.TestCase):
             self.assertIn("CAP-03", result.stdout)
             self.assertIn("CAP-04", result.stdout)
 
+    def test_duplicated_chapter_number_in_caption_is_warned(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "dupchap.docx"
+            document = docx.Document(str(FIXTURE))
+            document.add_paragraph("图4.4.2  氧化 1 h 后样品的表面与截面形貌及元素分布")
+            document.add_paragraph("表2.2.1  测试表格")
+            document.save(str(path))
+            result = self.run_lint(path, "--chapter")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("CAP-08", result.stdout)
+            self.assertIn("重复章号", result.stdout)
+
     def test_latin_in_cjk_font_is_warned(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "latin.docx"
